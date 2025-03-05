@@ -1,31 +1,62 @@
 import { useEffect, useState } from "react";
 import type { Schema } from "../amplify/data/resource";
 import { generateClient } from "aws-amplify/data";
+import TodoTable from "./components/TodoTable";
 
 const client = generateClient<Schema>();
 
 function App() {
   const [todos, setTodos] = useState<Array<Schema["Todo"]["type"]>>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState<string>("");
 
   useEffect(() => {
-    client.models.Todo.observeQuery().subscribe({
+    const subscription = client.models.Todo.observeQuery().subscribe({
       next: (data) => setTodos([...data.items]),
     });
+    return () => subscription.unsubscribe();
   }, []);
 
   function createTodo() {
-    client.models.Todo.create({ content: window.prompt("Todo content") });
+    const content = window.prompt("Todo content");
+    if (content) {
+      client.models.Todo.create({ content });
+    }
+  }
+
+  function deleteTodo(id: string) {
+    client.models.Todo.delete({ id });
+  }
+
+  function handleDoubleClick(todo: Schema["Todo"]["type"]) {
+    setEditingId(todo.id);
+    setEditContent(todo.content ?? "");
+  }
+
+  function handleEditChange(event: React.ChangeEvent<HTMLInputElement>) {
+    setEditContent(event.target.value);
+  }
+
+  function handleEditBlur(todo: Schema["Todo"]["type"]) {
+    if (editContent.trim() !== "") {
+      client.models.Todo.update({ id: todo.id, content: editContent });
+    }
+    setEditingId(null);
   }
 
   return (
     <main>
-      <h1>My todos</h1>
-      <button onClick={createTodo}>+ new</button>
-      <ul>
-        {todos.map((todo) => (
-          <li key={todo.id}>{todo.content}</li>
-        ))}
-      </ul>
+      <h1>My Todos</h1>
+      <button onClick={createTodo}>+ New</button>
+      <TodoTable
+        todos={todos}
+        editingId={editingId}
+        editContent={editContent}
+        handleDoubleClick={handleDoubleClick}
+        handleEditChange={handleEditChange}
+        handleEditBlur={handleEditBlur}
+        deleteTodo={deleteTodo}
+      />
       <div>
         🥳 App successfully hosted. Try creating a new todo.
         <br />
