@@ -3,6 +3,7 @@ import type { Schema } from "../amplify/data/resource";
 import { useAuthenticator } from '@aws-amplify/ui-react';
 import { generateClient } from "aws-amplify/data";
 import TodoTable from "./components/TodoTable";
+const { user, signOut } = useAuthenticator();
 
 
 const client = generateClient<Schema>();
@@ -49,7 +50,7 @@ function App() {
 
   return (
     <main>
-      <h1>My Todos</h1>
+      <h1>{user?.signInDetails?.loginId}'s todos</h1>
       <button onClick={createTodo}>+ New</button>
       <TodoTable
         todos={todos}
