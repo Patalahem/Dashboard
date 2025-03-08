@@ -4,7 +4,7 @@ import { useAuthenticator } from "@aws-amplify/ui-react";
 import { generateClient } from "aws-amplify/data";
 import TodoTable from "./components/TodoTable";
 import { FileUploader } from "@aws-amplify/ui-react-storage";
-import { getUrl } from "aws-amplify/storage";
+import { getUrl, list } from "aws-amplify/storage";
 import { Amplify } from "aws-amplify";
 import outputs from "../amplify_outputs.json";
 import "@aws-amplify/ui-react/styles.css";
@@ -35,10 +35,15 @@ function App() {
 
   async function fetchImage() {
     try {
-      const url = await getUrl({
-        path: `profile-pictures/${user?.userId}/uploaded-image.jpg`,
-      });
-      setImageUrl(url.url.toString()); // Convert URL to string
+      const files = await list({ path: `profile-pictures/${user?.userId}/` });
+
+      if (files.items.length > 0) {
+        const latestFile = files.items[0].path; // Get first file
+        const url = await getUrl({ path: latestFile });
+        setImageUrl(url.url.toString());
+      } else {
+        console.warn("No images found.");
+      }
     } catch (error) {
       console.error("Error fetching image:", error);
     }
@@ -99,6 +104,7 @@ function App() {
         path={`profile-pictures/${user?.userId}/`}
         maxFileCount={1}
         isResumable
+        onUploadSuccess={() => fetchImage()} // Refresh image after upload
       />
       
       {imageUrl && (
