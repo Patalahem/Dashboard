@@ -1,10 +1,15 @@
 import { useEffect, useState } from "react";
 import type { Schema } from "../amplify/data/resource";
-import { useAuthenticator } from '@aws-amplify/ui-react';
+import { useAuthenticator } from "@aws-amplify/ui-react";
 import { generateClient } from "aws-amplify/data";
 import TodoTable from "./components/TodoTable";
+import { FileUploader } from "@aws-amplify/ui-react-storage";
+import { getUrl } from "aws-amplify/storage";
+import { Amplify } from "aws-amplify";
+import outputs from "../amplify_outputs.json";
+import "@aws-amplify/ui-react/styles.css";
 
-
+Amplify.configure(outputs);
 
 const client = generateClient<Schema>();
 
@@ -13,6 +18,7 @@ function App() {
   const [todos, setTodos] = useState<Array<Schema["Todo"]["type"]>>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState<string>("");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const subscription = client.models.Todo.observeQuery().subscribe({
@@ -20,6 +26,23 @@ function App() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      fetchImage();
+    }
+  }, [user]);
+
+  async function fetchImage() {
+    try {
+      const url = await getUrl({
+        path: `profile-pictures/${user?.userId}/uploaded-image.jpg`,
+      });
+      setImageUrl(url.url.toString()); // Convert URL to string
+    } catch (error) {
+      console.error("Error fetching image:", error);
+    }
+  }
 
   function createTodo() {
     const content = window.prompt("Todo content");
@@ -69,6 +92,21 @@ function App() {
         </a>
       </div>
       <button onClick={signOut}>Sign out</button>
+      
+      <h2>Upload an Image</h2>
+      <FileUploader
+        acceptedFileTypes={["image/*"]}
+        path={`profile-pictures/${user?.userId}/`}
+        maxFileCount={1}
+        isResumable
+      />
+      
+      {imageUrl && (
+        <div>
+          <h2>Uploaded Image</h2>
+          <img src={imageUrl} alt="Uploaded" style={{ maxWidth: "300px" }} />
+        </div>
+      )}
     </main>
   );
 }
