@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuthenticator } from "@aws-amplify/ui-react";
-import { getUrl, list, remove, uploadData } from "aws-amplify/storage";
+import { getUrl, list, remove } from "aws-amplify/storage";
 import { FileUploader } from "@aws-amplify/ui-react-storage";
 import { Amplify } from "aws-amplify";
 import outputs from "../amplify_outputs.json";
