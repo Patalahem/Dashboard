@@ -1,119 +1,119 @@
 import { useEffect, useState } from "react";
-import type { Schema } from "../amplify/data/resource";
 import { useAuthenticator } from "@aws-amplify/ui-react";
-import { generateClient } from "aws-amplify/data";
-import TodoTable from "./components/TodoTable";
+import { getUrl, list, remove, uploadData } from "aws-amplify/storage";
 import { FileUploader } from "@aws-amplify/ui-react-storage";
-import { getUrl, list } from "aws-amplify/storage";
-//import { Amplify } from "aws-amplify";
-//import outputs from "../amplify_outputs.json";
+import { Amplify } from "aws-amplify";
+import outputs from "../amplify_outputs.json";
 import "@aws-amplify/ui-react/styles.css";
+import "./index.css"; // Import styling
 
-//Amplify.configure(outputs);
+Amplify.configure(outputs);
 
-const client = generateClient<Schema>();
+interface ImageItem {
+  name: string;
+  path: string;
+}
 
 function App() {
   const { user, signOut } = useAuthenticator();
-  const [todos, setTodos] = useState<Array<Schema["Todo"]["type"]>>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editContent, setEditContent] = useState<string>("");
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [images, setImages] = useState<ImageItem[]>([]);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
+  // Fetch list of images on load
   useEffect(() => {
-    const subscription = client.models.Todo.observeQuery().subscribe({
-      next: (data) => setTodos([...data.items]),
-    });
-    return () => subscription.unsubscribe();
+    fetchImages();
   }, []);
 
-  useEffect(() => {
-    if (user) {
-      fetchImage();
-    }
-  }, [user]);
-
-  async function fetchImage() {
+  // Fetch all uploaded images
+  async function fetchImages() {
     try {
-      const files = await list({ path: `profile-pictures/${user?.userId}/` });
-
-      if (files.items.length > 0) {
-        const latestFile = files.items[0].path; // Get first file
-        const url = await getUrl({ path: latestFile });
-        setImageUrl(url.url.toString());
-      } else {
-        console.warn("No images found.");
-      }
+      const result = await list({ path: `uploads/${user?.userId}/` });
+      const imageList = result.items.map((file) => ({
+        name: file.path.split("/").pop() || "Unknown",
+        path: file.path,
+      }));
+      setImages(imageList);
     } catch (error) {
-      console.error("Error fetching image:", error);
+      console.error("Error fetching images:", error);
     }
   }
 
-  function createTodo() {
-    const content = window.prompt("Todo content");
-    if (content) {
-      client.models.Todo.create({ content });
+  // View selected image
+  async function viewImage(path: string) {
+    try {
+      const url = await getUrl({ path });
+      setSelectedImage(url.url.toString());
+    } catch (error) {
+      console.error("Error loading image:", error);
     }
   }
 
-  function deleteTodo(id: string) {
-    client.models.Todo.delete({ id });
-  }
-
-  function handleDoubleClick(todo: Schema["Todo"]["type"]) {
-    setEditingId(todo.id);
-    setEditContent(todo.content ?? "");
-  }
-
-  function handleEditChange(event: React.ChangeEvent<HTMLInputElement>) {
-    setEditContent(event.target.value);
-  }
-
-  function handleEditBlur(todo: Schema["Todo"]["type"]) {
-    if (editContent.trim() !== "") {
-      client.models.Todo.update({ id: todo.id, content: editContent });
+  // Delete an image
+  async function deleteImage(path: string) {
+    try {
+      await remove({ path });
+      setImages(images.filter((image) => image.path !== path));
+      if (selectedImage === path) setSelectedImage(null);
+    } catch (error) {
+      console.error("Error deleting image:", error);
     }
-    setEditingId(null);
   }
 
   return (
-    <main>
-      <h1>{user?.signInDetails?.loginId}'s todos</h1>
-      <button onClick={createTodo}>+ New</button>
-      <TodoTable
-        todos={todos}
-        editingId={editingId}
-        editContent={editContent}
-        handleDoubleClick={handleDoubleClick}
-        handleEditChange={handleEditChange}
-        handleEditBlur={handleEditBlur}
-        deleteTodo={deleteTodo}
-      />
-      <div>
-        🥳 App successfully hosted. Try creating a new todo.
-        <br />
-        <a href="https://docs.amplify.aws/react/start/quickstart/#make-frontend-updates">
-          Review next step of this tutorial.
-        </a>
-      </div>
-      <button onClick={signOut}>Sign out</button>
-      
-      <h2>Upload an Image</h2>
-      <FileUploader
-        acceptedFileTypes={["image/*"]}
-        path={`profile-pictures/${user?.userId}/`}
-        maxFileCount={1}
-        isResumable
-        onUploadSuccess={() => fetchImage()} // Refresh image after upload
-      />
-      
-      {imageUrl && (
-        <div>
-          <h2>Uploaded Image</h2>
-          <img src={imageUrl} alt="Uploaded" style={{ maxWidth: "300px" }} />
+    <div className="container">
+      {/* Header */}
+      <header className="header">
+        <h1>{user?.signInDetails?.loginId} SARenity</h1>
+        <button onClick={signOut}>Sign out</button>
+      </header>
+
+      {/* Main Layout */}
+      <div className="content">
+        {/* Left: Image List & Upload */}
+        <div className="sidebar">
+          <h2>Uploaded Images</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Image Name</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {images.map((image) => (
+                <tr key={image.path}>
+                  <td>{image.name}</td>
+                  <td>
+                    <button onClick={() => viewImage(image.path)}>View</button>
+                    <button onClick={() => deleteImage(image.path)}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Image Upload Section */}
+          <h2>Upload an Image</h2>
+          <FileUploader
+            acceptedFileTypes={["image/*"]}
+            path={`uploads/${user?.userId}/`}
+            maxFileCount={1}
+            isResumable
+            onUploadSuccess={() => fetchImages()} // Refresh list after upload
+          />
         </div>
-      )}
-    </main>
+
+        {/* Right: Image Viewing Section */}
+        <div className="image-viewer">
+          <h2>Image Preview</h2>
+          {selectedImage ? (
+            <img src={selectedImage} alt="Selected" />
+          ) : (
+            <p>Select an image to view</p>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
