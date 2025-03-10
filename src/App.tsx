@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import { getUrl, list, remove } from "aws-amplify/storage";
 import { FileUploader } from "@aws-amplify/ui-react-storage";
-import { Amplify } from "aws-amplify";
-import outputs from "../amplify_outputs.json";
+//import { Amplify } from "aws-amplify";
+//import outputs from "../amplify_outputs.json";
 import "@aws-amplify/ui-react/styles.css";
 import "./index.css"; // Import styling
 
-Amplify.configure(outputs);
+//Amplify.configure(outputs);
 
 interface ImageItem {
   name: string;
