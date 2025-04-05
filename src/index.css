@@ -1,23 +1,18 @@
-/* index.css - Modern Black & White Theme */
 :root {
-  --primary-bg: #121212; /* Dark Background */
-  --secondary-bg: #1e1e1e; /* Slightly Lighter Dark */
-  --text-color: #ffffff; /* White Text */
-  --accent-color: #f0f0f0; /* Light Gray for Borders */
-  --button-bg: #333333; /* Dark Gray Buttons */
-}
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  font-family: 'Arial', sans-serif;
+  --bg-color: #0d0d0d;
+  --fg-color: #ffffff;
+  --accent-color: #1a1a1a;
+  --highlight-color: #cccccc;
+  --button-color: #262626;
+  --border-color: #333333;
+  --font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 }
 
 body {
-  background-color: var(--primary-bg);
-  color: var(--text-color);
-  transition: background 0.3s, color 0.3s;
+  margin: 0;
+  background-color: var(--bg-color);
+  color: var(--fg-color);
+  font-family: var(--font-family);
 }
 
 .container {
@@ -26,99 +21,121 @@ body {
   height: 100vh;
 }
 
-/* Header */
 .header {
+  background-color: var(--accent-color);
+  padding: 0.75rem 1.5rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: var(--secondary-bg);
-  padding: 15px 20px;
-  border-bottom: 2px solid var(--accent-color);
+  border-bottom: 1px solid var(--border-color);
 }
 
-.header h1 {
-  font-size: 20px;
+.logo {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin: 0;
 }
 
-button {
-  background: var(--button-bg);
-  color: var(--text-color);
-  border: 1px solid var(--accent-color);
-  padding: 8px 16px;
-  border-radius: 5px;
-  font-size: 14px;
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.user-email {
+  font-size: 0.85rem;
+  color: var(--highlight-color);
+}
+
+.header button {
+  background-color: var(--button-color);
+  border: none;
+  color: var(--fg-color);
+  padding: 0.4rem 0.8rem;
   cursor: pointer;
-  transition: background 0.3s;
+  border-radius: 5px;
 }
 
-button:hover {
-  background: var(--accent-color);
-  color: var(--primary-bg);
-}
 
-/* Main Layout */
 .content {
   display: flex;
   flex: 1;
-  height: 100%;
+  overflow: hidden;
 }
 
-/* Left Panel: Image List & Upload */
 .sidebar {
-  width: 40%;
-  background: var(--secondary-bg);
-  padding: 20px;
+  width: 350px;
+  background-color: var(--accent-color);
+  padding: 1rem;
+  border-right: 1px solid var(--border-color);
   overflow-y: auto;
-  border-right: 2px solid var(--accent-color);
 }
 
-h2 {
-  text-align: center;
-  margin-bottom: 10px;
+.sidebar h2 {
+  font-size: 1.5rem;
+  margin-top: 0;
 }
 
-/* Image Table */
-table {
+.sidebar table {
   width: 100%;
-  margin-bottom: 15px;
   border-collapse: collapse;
+  font-size: 0.9rem;
 }
 
-th, td {
-  padding: 10px;
+.sidebar th,
+.sidebar td {
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
   text-align: left;
-  border-bottom: 1px solid var(--accent-color);
 }
 
-th {
-  background: var(--button-bg);
+.sidebar button {
+  margin-right: 5px;
+  background-color: var(--button-color);
+  border: none;
+  color: var(--fg-color);
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  border-radius: 3px;
 }
 
-td {
-  background: var(--secondary-bg);
-}
-
-img {
-  max-width: 100%;
-  max-height: 400px;
-  display: block;
-  margin: auto;
-  border: 2px solid var(--accent-color);
-}
-
-/* Right Panel: Image Viewing */
 .image-viewer {
-  width: 60%;
+  flex: 1;
+  padding: 2rem;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 20px;
+  overflow-y: auto;
+}
+
+.image-viewer h2 {
+  margin-top: 0;
+  margin-bottom: 1rem;
 }
 
 .image-viewer img {
-  width: auto;
   max-width: 100%;
-  max-height: 80%;
-  border-radius: 5px;
+  max-height: 60vh;
+  object-fit: contain;
+  border: 1px solid var(--border-color);
+}
+
+.inference-results {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border-color);
+  background-color: var(--accent-color);
+  width: 100%;
+  max-width: 500px;
+}
+
+.inference-results ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+
+.inference-results li {
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
 }
