@@ -10,18 +10,15 @@ interface ImageItem {
   path: string;
 }
 
-interface Detection {
-  class: string;
-  confidence: number;
-  bbox: [number, number, number, number];
-}
-
 function App() {
   const { user, signOut } = useAuthenticator();
   const [images, setImages] = useState<ImageItem[]>([]);
-  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
   const [selectedImageName, setSelectedImageName] = useState<string | null>(null);
-  const [detectionResults, setDetectionResults] = useState<Detection[] | null>(null);
+  const [processedImageUrl, setProcessedImageUrl] = useState<string | null>(null);
+  const [mode, setMode] = useState<"airplane" | "ship" | "both">("both");
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const API_BASE = "http://<YOUR-PUBLIC-IP>:8080"; // ← Replace with your Flask API URL
 
   useEffect(() => {
     fetchImages();
@@ -44,25 +41,41 @@ function App() {
     try {
       const url = await getUrl({ path });
       const name = path.split("/").pop() || "";
-      setSelectedImageUrl(url.url.toString());
       setSelectedImageName(name);
-      fetchDetectionResults(name);
+      setProcessedImageUrl(null); // Clear previous results
     } catch (error) {
       console.error("Error loading image:", error);
     }
   }
 
-  async function fetchDetectionResults(imageName: string) {
+  async function processImage() {
+    if (!selectedImageName) return;
+
+    setIsProcessing(true);
     try {
-      const resultUrl = await getUrl({
-        path: `processed-results/${imageName.replace(/\.[^/.]+$/, "")}.json`,
+      const url = await getUrl({
+        path: `uploads/${user?.userId}/${selectedImageName}`,
       });
-      const response = await fetch(resultUrl.url.toString());
-      const data = await response.json();
-      setDetectionResults(data);
-    } catch (err) {
-      console.warn("Detection results not found yet.");
-      setDetectionResults(null);
+
+      const formData = new FormData();
+      formData.append("image", await fetch(url.url.toString()).then(res => res.blob()), selectedImageName);
+      formData.append("mode", mode);
+
+      const response = await fetch(`${API_BASE}/detect`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error("Inference failed");
+
+      const blob = await response.blob();
+      const objectURL = URL.createObjectURL(blob);
+      setProcessedImageUrl(objectURL);
+    } catch (error) {
+      console.error("Error processing image:", error);
+      setProcessedImageUrl(null);
+    } finally {
+      setIsProcessing(false);
     }
   }
 
@@ -70,10 +83,8 @@ function App() {
     try {
       await remove({ path });
       setImages(images.filter((image) => image.path !== path));
-      if (selectedImageUrl === path) {
-        setSelectedImageUrl(null);
-        setDetectionResults(null);
-      }
+      setSelectedImageName(null);
+      setProcessedImageUrl(null);
     } catch (error) {
       console.error("Error deleting image:", error);
     }
@@ -88,9 +99,9 @@ function App() {
           <button onClick={signOut}>Sign out</button>
         </div>
       </header>
+
       <div className="content">
         <div className="sidebar">
-          {/* Upload Section First */}
           <h2>Upload an Image</h2>
           <FileUploader
             acceptedFileTypes={["image/*"]}
@@ -100,7 +111,6 @@ function App() {
             onUploadSuccess={() => fetchImages()}
           />
 
-          {/* Table of Images */}
           <table>
             <thead>
               <tr>
@@ -113,7 +123,7 @@ function App() {
                 <tr key={image.path}>
                   <td>{image.name}</td>
                   <td>
-                    <button onClick={() => viewImage(image.path)}>View</button>
+                    <button onClick={() => viewImage(image.path)}>Select</button>
                     <button onClick={() => deleteImage(image.path)}>Delete</button>
                   </td>
                 </tr>
@@ -123,28 +133,30 @@ function App() {
         </div>
 
         <div className="image-viewer">
-          <h2>Image Preview</h2>
-          {selectedImageUrl ? (
+          <h2>Image Processing</h2>
+          {selectedImageName ? (
             <>
-              <img src={selectedImageUrl} alt="Selected" />
-              <div className="inference-results">
-                <h3>Detections:</h3>
-                {detectionResults ? (
-                  <ul>
-                    {detectionResults.map((det, index) => (
-                      <li key={index}>
-                        <strong>{det.class}</strong> — Confidence:{" "}
-                        {(det.confidence * 100).toFixed(1)}%
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>No detections found for this image.</p>
-                )}
-              </div>
+              <p><strong>Selected:</strong> {selectedImageName}</p>
+              <label>
+                Detection Mode:
+                <select value={mode} onChange={(e) => setMode(e.target.value as any)}>
+                  <option value="airplane">Airplane</option>
+                  <option value="ship">Ship</option>
+                  <option value="both">Both</option>
+                </select>
+              </label>
+              <button onClick={processImage} disabled={isProcessing}>
+                {isProcessing ? "Processing..." : "Run Detection"}
+              </button>
+              {processedImageUrl && (
+                <div>
+                  <h3>Result</h3>
+                  <img src={processedImageUrl} alt="Detected" style={{ maxWidth: "100%" }} />
+                </div>
+              )}
             </>
           ) : (
-            <p>Select an image to view</p>
+            <p>Select an image to process</p>
           )}
         </div>
       </div>

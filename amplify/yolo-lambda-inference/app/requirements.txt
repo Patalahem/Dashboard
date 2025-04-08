@@ -1,5 +1,0 @@
-ultralytics==8.3.16
-torch
-numpy
-Pillow
-boto3

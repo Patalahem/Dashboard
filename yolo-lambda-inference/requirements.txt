@@ -1,0 +1,5 @@
+flask
+ultralytics==8.3.16
+Pillow==11.0.0
+numpy
+opencv-python-headless
