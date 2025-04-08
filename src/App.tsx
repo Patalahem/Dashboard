@@ -39,7 +39,7 @@ function App() {
 
   async function viewImage(path: string) {
     try {
-      const url = await getUrl({ path });
+      //const url = await getUrl({ path });
       const name = path.split("/").pop() || "";
       setSelectedImageName(name);
       setProcessedImageUrl(null); // Clear previous results
