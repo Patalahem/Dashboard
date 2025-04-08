@@ -18,7 +18,7 @@ function App() {
   const [mode, setMode] = useState<"airplane" | "ship" | "both">("both");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const API_BASE = "http://<YOUR-PUBLIC-IP>:8080"; // ← Replace with your Flask API URL
+  const API_BASE = "http://100.25.202.138:8080"; // ← Replace with your Flask API URL
 
   useEffect(() => {
     fetchImages();
