@@ -18,7 +18,7 @@ function App() {
   const [mode, setMode] = useState<"airplane" | "ship" | "both">("both");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const API_BASE = "http://<YOUR-PUBLIC-IP>:8080"; // ← Replace with your Flask API URL
+  const API_BASE = "http://100.25.202.138:8080"; // ← Update if your backend IP changes
 
   useEffect(() => {
     fetchImages();
@@ -39,12 +39,11 @@ function App() {
 
   async function viewImage(path: string) {
     try {
-      const url = await getUrl({ path });
       const name = path.split("/").pop() || "";
       setSelectedImageName(name);
-      setProcessedImageUrl(null); // Clear previous results
+      setProcessedImageUrl(null);
     } catch (error) {
-      console.error("Error loading image:", error);
+      console.error("Error selecting image:", error);
     }
   }
 
@@ -57,8 +56,10 @@ function App() {
         path: `uploads/${user?.userId}/${selectedImageName}`,
       });
 
+      const imageBlob = await fetch(url.url.toString()).then((res) => res.blob());
+
       const formData = new FormData();
-      formData.append("image", await fetch(url.url.toString()).then(res => res.blob()), selectedImageName);
+      formData.append("image", imageBlob, selectedImageName);
       formData.append("mode", mode);
 
       const response = await fetch(`${API_BASE}/detect`, {
@@ -68,9 +69,15 @@ function App() {
 
       if (!response.ok) throw new Error("Inference failed");
 
-      const blob = await response.blob();
-      const objectURL = URL.createObjectURL(blob);
-      setProcessedImageUrl(objectURL);
+      const resultBlob = await response.blob();
+      const objectUrl = URL.createObjectURL(resultBlob);
+
+      // Clean up old blob URLs
+      if (processedImageUrl) {
+        URL.revokeObjectURL(processedImageUrl);
+      }
+
+      setProcessedImageUrl(objectUrl);
     } catch (error) {
       console.error("Error processing image:", error);
       setProcessedImageUrl(null);
@@ -148,10 +155,14 @@ function App() {
               <button onClick={processImage} disabled={isProcessing}>
                 {isProcessing ? "Processing..." : "Run Detection"}
               </button>
+
               {processedImageUrl && (
                 <div>
                   <h3>Result</h3>
-                  <img src={processedImageUrl} alt="Detected" style={{ maxWidth: "100%" }} />
+                  <img src={processedImageUrl} alt="Detected" style={{ maxWidth: "100%", marginBottom: "1rem" }} />
+                  <a href={processedImageUrl} download="detection_result.jpg">
+                    Download Result
+                  </a>
                 </div>
               )}
             </>
