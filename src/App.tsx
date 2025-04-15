@@ -10,15 +10,22 @@ interface ImageItem {
   path: string;
 }
 
+interface Detection {
+  class: string;
+  confidence: number;
+  bbox: [number, number, number, number];
+}
+
 function App() {
   const { user, signOut } = useAuthenticator();
   const [images, setImages] = useState<ImageItem[]>([]);
   const [selectedImageName, setSelectedImageName] = useState<string | null>(null);
-  const [processedImageUrl, setProcessedImageUrl] = useState<string | null>(null);
+  const [s3ProcessedUrl, setS3ProcessedUrl] = useState<string | null>(null);
+  const [detections, setDetections] = useState<Detection[] | null>(null);
   const [mode, setMode] = useState<"airplane" | "ship" | "both">("both");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const API_BASE = "http://100.25.202.138:8080"; // ← Update if your backend IP changes
+  const API_BASE = "http://localhost:8080"; // Change to your Fargate IP if needed
 
   useEffect(() => {
     fetchImages();
@@ -41,25 +48,21 @@ function App() {
     try {
       const name = path.split("/").pop() || "";
       setSelectedImageName(name);
-      setProcessedImageUrl(null);
+      setS3ProcessedUrl(null);
+      setDetections(null);
     } catch (error) {
-      console.error("Error selecting image:", error);
+      console.error("Error loading image:", error);
     }
   }
 
   async function processImage() {
     if (!selectedImageName) return;
-
     setIsProcessing(true);
+
     try {
-      const url = await getUrl({
-        path: `uploads/${user?.userId}/${selectedImageName}`,
-      });
-
-      const imageBlob = await fetch(url.url.toString()).then((res) => res.blob());
-
+      const url = await getUrl({ path: `uploads/${user?.userId}/${selectedImageName}` });
       const formData = new FormData();
-      formData.append("image", imageBlob, selectedImageName);
+      formData.append("image", await fetch(url.url.toString()).then((res) => res.blob()), selectedImageName);
       formData.append("mode", mode);
 
       const response = await fetch(`${API_BASE}/detect`, {
@@ -67,20 +70,15 @@ function App() {
         body: formData,
       });
 
-      if (!response.ok) throw new Error("Inference failed");
-
-      const resultBlob = await response.blob();
-      const objectUrl = URL.createObjectURL(resultBlob);
-
-      // Clean up old blob URLs
-      if (processedImageUrl) {
-        URL.revokeObjectURL(processedImageUrl);
+      const data = await response.json();
+      if (response.ok && data.s3_url) {
+        setS3ProcessedUrl(data.s3_url);
+        setDetections(data.detections);
+      } else {
+        console.warn("Detection failed or incomplete response:", data);
       }
-
-      setProcessedImageUrl(objectUrl);
-    } catch (error) {
-      console.error("Error processing image:", error);
-      setProcessedImageUrl(null);
+    } catch (err) {
+      console.error("Detection error:", err);
     } finally {
       setIsProcessing(false);
     }
@@ -91,7 +89,8 @@ function App() {
       await remove({ path });
       setImages(images.filter((image) => image.path !== path));
       setSelectedImageName(null);
-      setProcessedImageUrl(null);
+      setS3ProcessedUrl(null);
+      setDetections(null);
     } catch (error) {
       console.error("Error deleting image:", error);
     }
@@ -156,13 +155,22 @@ function App() {
                 {isProcessing ? "Processing..." : "Run Detection"}
               </button>
 
-              {processedImageUrl && (
+              {s3ProcessedUrl && (
                 <div>
                   <h3>Result</h3>
-                  <img src={processedImageUrl} alt="Detected" style={{ maxWidth: "100%", marginBottom: "1rem" }} />
-                  <a href={processedImageUrl} download="detection_result.jpg">
-                    Download Result
-                  </a>
+                  <img src={s3ProcessedUrl} alt="Processed result" style={{ maxWidth: "100%" }} />
+                  {detections && (
+                    <>
+                      <h4>Detections:</h4>
+                      <ul>
+                        {detections.map((det, idx) => (
+                          <li key={idx}>
+                            <strong>{det.class}</strong> — Confidence: {(det.confidence * 100).toFixed(1)}%
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
                 </div>
               )}
             </>
