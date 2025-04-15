@@ -19,6 +19,8 @@ interface Detection {
 function App() {
   const { user, signOut } = useAuthenticator();
   const [images, setImages] = useState<ImageItem[]>([]);
+  const [processedImages, setProcessedImages] = useState<ImageItem[]>([]);
+  const [processedImageUrls, setProcessedImageUrls] = useState<{ [key: string]: string }>({});
   const [selectedImageName, setSelectedImageName] = useState<string | null>(null);
   const [s3ProcessedUrl, setS3ProcessedUrl] = useState<string | null>(null);
   const [detections, setDetections] = useState<Detection[] | null>(null);
@@ -33,12 +35,27 @@ function App() {
 
   async function fetchImages() {
     try {
-      const result = await list({ path: `uploads/${user?.userId}/` });
-      const imageList = result.items.map((file) => ({
+      const uploadedResult = await list({ path: `uploads/${user?.userId}/` });
+      const uploadedList = uploadedResult.items.map((file) => ({
         name: file.path.split("/").pop() || "Unknown",
         path: file.path,
       }));
-      setImages(imageList);
+      setImages(uploadedList);
+
+      const processedResult = await list({ path: "processed/" });
+      const processedList: ImageItem[] = [];
+      const urls: { [key: string]: string } = {};
+
+      for (const file of processedResult.items) {
+        const name = file.path.split("/").pop() || "Unknown";
+        processedList.push({ name, path: file.path });
+
+        const urlRes = await getUrl({ path: file.path });
+        urls[file.path] = urlRes.url.toString();
+      }
+
+      setProcessedImages(processedList);
+      setProcessedImageUrls(urls);
     } catch (error) {
       console.error("Error fetching images:", error);
     }
@@ -74,6 +91,7 @@ function App() {
       if (response.ok && data.s3_url) {
         setS3ProcessedUrl(data.s3_url);
         setDetections(data.detections);
+        fetchImages(); // Refresh processed images table
       } else {
         console.warn("Detection failed or incomplete response:", data);
       }
@@ -131,6 +149,34 @@ function App() {
                   <td>
                     <button onClick={() => viewImage(image.path)}>Select</button>
                     <button onClick={() => deleteImage(image.path)}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <h3>Processed Images</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Filename</th>
+                <th>Preview</th>
+              </tr>
+            </thead>
+            <tbody>
+              {processedImages.map((img) => (
+                <tr key={img.path}>
+                  <td>{img.name}</td>
+                  <td>
+                    {processedImageUrls[img.path] ? (
+                      <img
+                        src={processedImageUrls[img.path]}
+                        alt={img.name}
+                        style={{ width: "100px", height: "auto", border: "1px solid #ccc" }}
+                      />
+                    ) : (
+                      "Loading..."
+                    )}
                   </td>
                 </tr>
               ))}
