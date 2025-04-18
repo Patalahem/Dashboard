@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from detect_airplane import run_detection as detect_airplanes
 from detect_ship import run_detection as detect_ships
 from detect_combined import run_combined
