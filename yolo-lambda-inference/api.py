@@ -9,7 +9,7 @@ from botocore.exceptions import NoCredentialsError, ClientError
 app = Flask(__name__)
 
 # ✅ Match this with your Amplify Storage bucket name
-S3_BUCKET = "amplify-d1axuk0owb4pv8-ma-amplifyteamdrivebucket28-lr54pp9hbiro"  # all lowercase, no underscores
+S3_BUCKET = "processed-images-100"  # all lowercase, no underscores
 
 # ✅ S3 client uses env vars: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
 s3 = boto3.client("s3")
