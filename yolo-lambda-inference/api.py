@@ -1,5 +1,4 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS
 from detect_airplane import run_detection as detect_airplanes
 from detect_ship import run_detection as detect_ships
 from detect_combined import run_combined
@@ -10,7 +9,7 @@ from botocore.exceptions import NoCredentialsError, ClientError
 app = Flask(__name__)
 
 # ✅ Match this with your Amplify Storage bucket name
-S3_BUCKET = "processed-images-100"  # all lowercase, no underscores
+S3_BUCKET = "amplify-d1axuk0owb4pv8-ma-amplifyteamdrivebucket28-lr54pp9hbiro" #processed-images-100"  # all lowercase, no underscores
 
 # ✅ S3 client uses env vars: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
 s3 = boto3.client("s3")
