@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import { getUrl, list, remove } from "aws-amplify/storage";
 import { FileUploader } from "@aws-amplify/ui-react-storage";
@@ -27,7 +27,7 @@ function App() {
   const [mode, setMode] = useState<"airplane" | "ship" | "both">("both");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const API_BASE = "http://54.152.38.98:8080"; // your Fargate endpoint
+  const API_BASE = "http://54.152.38.98:8080"; // Change to your Fargate IP if needed
 
   useEffect(() => {
     fetchImages();
@@ -35,7 +35,6 @@ function App() {
 
   async function fetchImages() {
     try {
-      // list uploaded files
       const uploadedResult = await list({ path: `uploads/${user?.userId}/` });
       const uploadedList = uploadedResult.items.map((file) => ({
         name: file.path.split("/").pop() || "Unknown",
@@ -43,7 +42,6 @@ function App() {
       }));
       setImages(uploadedList);
 
-      // list processed files
       const processedResult = await list({ path: "processed/" });
       const processedList: ImageItem[] = [];
       const urls: { [key: string]: string } = {};
@@ -78,7 +76,6 @@ function App() {
     setIsProcessing(true);
 
     try {
-      // fetch the file blob directly from S3 using pre-signed URL
       const { url } = await getUrl({ path: `uploads/${user?.userId}/${selectedImageName}` });
       const blob = await fetch(url.toString()).then((res) => res.blob());
 
@@ -95,7 +92,7 @@ function App() {
       if (response.ok && data.s3_url) {
         setS3ProcessedUrl(data.s3_url);
         setDetections(data.detections);
-        fetchImages(); // refresh tables
+        fetchImages();
       } else {
         console.warn("Detection failed or incomplete response:", data);
       }
@@ -136,9 +133,9 @@ function App() {
             path={`uploads/${user?.userId}/`}
             maxFileCount={1}
             isResumable
-            onUploadSuccess={({ file }) => {
-              fetchImages();                    // refresh upload list
-              viewImage(`uploads/${user?.userId}/${file.name}`); // auto-select
+            onUploadSuccess={(event) => {
+              fetchImages();
+              viewImage(event.key!);
             }}
           />
 
