@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import { getUrl, list, remove } from "aws-amplify/storage";
 import { FileUploader } from "@aws-amplify/ui-react-storage";
@@ -27,7 +27,7 @@ function App() {
   const [mode, setMode] = useState<"airplane" | "ship" | "both">("both");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const API_BASE = "http://54.152.38.98:8080"; // Change to your Fargate IP if needed
+  const API_BASE = "http://54.152.38.98:8080"; // your Fargate endpoint
 
   useEffect(() => {
     fetchImages();
@@ -35,6 +35,7 @@ function App() {
 
   async function fetchImages() {
     try {
+      // list uploaded files
       const uploadedResult = await list({ path: `uploads/${user?.userId}/` });
       const uploadedList = uploadedResult.items.map((file) => ({
         name: file.path.split("/").pop() || "Unknown",
@@ -42,6 +43,7 @@ function App() {
       }));
       setImages(uploadedList);
 
+      // list processed files
       const processedResult = await list({ path: "processed/" });
       const processedList: ImageItem[] = [];
       const urls: { [key: string]: string } = {};
@@ -61,25 +63,27 @@ function App() {
     }
   }
 
-  async function viewImage(path: string) {
-    try {
-      const name = path.split("/").pop() || "";
-      setSelectedImageName(name);
-      setS3ProcessedUrl(null);
-      setDetections(null);
-    } catch (error) {
-      console.error("Error loading image:", error);
-    }
+  function viewImage(path: string) {
+    const name = path.split("/").pop() || "";
+    setSelectedImageName(name);
+    setS3ProcessedUrl(null);
+    setDetections(null);
   }
 
   async function processImage() {
-    if (!selectedImageName) return;
+    if (!selectedImageName) {
+      console.warn("No image selected for processing");
+      return;
+    }
     setIsProcessing(true);
 
     try {
-      const url = await getUrl({ path: `uploads/${user?.userId}/${selectedImageName}` });
+      // fetch the file blob directly from S3 using pre-signed URL
+      const { url } = await getUrl({ path: `uploads/${user?.userId}/${selectedImageName}` });
+      const blob = await fetch(url.toString()).then((res) => res.blob());
+
       const formData = new FormData();
-      formData.append("image", await fetch(url.url.toString()).then((res) => res.blob()), selectedImageName);
+      formData.append("image", blob, selectedImageName);
       formData.append("mode", mode);
 
       const response = await fetch(`${API_BASE}/detect`, {
@@ -91,7 +95,7 @@ function App() {
       if (response.ok && data.s3_url) {
         setS3ProcessedUrl(data.s3_url);
         setDetections(data.detections);
-        fetchImages(); // Refresh processed images table
+        fetchImages(); // refresh tables
       } else {
         console.warn("Detection failed or incomplete response:", data);
       }
@@ -105,7 +109,7 @@ function App() {
   async function deleteImage(path: string) {
     try {
       await remove({ path });
-      setImages(images.filter((image) => image.path !== path));
+      setImages(images.filter((img) => img.path !== path));
       setSelectedImageName(null);
       setS3ProcessedUrl(null);
       setDetections(null);
@@ -132,7 +136,10 @@ function App() {
             path={`uploads/${user?.userId}/`}
             maxFileCount={1}
             isResumable
-            onUploadSuccess={() => fetchImages()}
+            onUploadSuccess={({ file }) => {
+              fetchImages();                    // refresh upload list
+              viewImage(`uploads/${user?.userId}/${file.name}`); // auto-select
+            }}
           />
 
           <table>
@@ -221,7 +228,7 @@ function App() {
               )}
             </>
           ) : (
-            <p>Select an image to process</p>
+            <p>Select or upload an image to process</p>
           )}
         </div>
       </div>
