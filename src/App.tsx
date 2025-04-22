@@ -27,7 +27,7 @@ function App() {
   const [mode, setMode] = useState<"airplane" | "ship" | "both">("both");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const API_BASE = "http://3.238.177.29"; // Change to your Fargate IP if needed
+  const API_BASE = "http://54.152.38.98:8080"; // Change to your Fargate IP if needed
 
   useEffect(() => {
     fetchImages();
