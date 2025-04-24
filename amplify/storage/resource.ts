@@ -7,6 +7,6 @@ export const storage = defineStorage({
     "uploads/{entity_id}/*": [allow.authenticated.to(["read", "write", "delete"])],
 
     // Access for reading processed results
-    "processed/*": [allow.authenticated.to(["read"])],
+    "processed/*": [allow.authenticated.to(["read", "delete"])],
   }),
 });
