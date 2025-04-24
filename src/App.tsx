@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import { getUrl, list, remove } from "aws-amplify/storage";
 import { FileUploader } from "@aws-amplify/ui-react-storage";
+import { FaDownload, FaTrash } from "react-icons/fa";
 import "@aws-amplify/ui-react/styles.css";
 import "./index.css";
 
 interface ImageItem {
   name: string;
-  path: string;  // S3 key, e.g. "processed/foo.jpg" or "uploads/.../bar.jpg"
+  path: string;
 }
 
 interface Detection {
@@ -16,11 +17,26 @@ interface Detection {
   bbox: [number, number, number, number];
 }
 
+// common button style
+const actionButtonStyle: React.CSSProperties = {
+  backgroundColor: "#555", // darkish gray
+  color: "#fff",
+  border: "none",
+  padding: "6px",
+  borderRadius: "4px",
+  cursor: "pointer",
+  margin: "0 4px",
+};
+
 function App() {
   const { user, signOut } = useAuthenticator();
+
   const [images, setImages] = useState<ImageItem[]>([]);
   const [processedImages, setProcessedImages] = useState<ImageItem[]>([]);
   const [processedImageUrls, setProcessedImageUrls] = useState<{ [key: string]: string }>({});
+  const [processedDetections, setProcessedDetections] = useState<{
+    [key: string]: Detection[];
+  }>({});
   const [selectedImageName, setSelectedImageName] = useState<string | null>(null);
   const [s3ProcessedUrl, setS3ProcessedUrl] = useState<string | null>(null);
   const [detections, setDetections] = useState<Detection[] | null>(null);
@@ -35,37 +51,35 @@ function App() {
 
   async function fetchImages() {
     try {
-      // list user uploads
-      const uploadedResult = await list({ path: `uploads/${user?.userId}/` });
+      // list uploads
+      const up = await list({ path: `uploads/${user?.userId}/` });
       setImages(
-        uploadedResult.items.map(file => ({
-          name: file.path.split("/").pop() || "Unknown",
-          path: file.path,
+        up.items.map((f) => ({
+          name: f.path.split("/").pop() || "Unknown",
+          path: f.path,
         }))
       );
 
-      // list processed files
-      const procResult = await list({ path: "processed/" });
-      const procItems: ImageItem[] = [];
+      // list processed
+      const pr = await list({ path: "processed/" });
+      const pi: ImageItem[] = [];
       const urls: { [key: string]: string } = {};
-
-      for (const file of procResult.items) {
-        const key = file.path;
-        procItems.push({
-          name: key.split("/").pop() || "Unknown",
-          path: key,
+      for (const f of pr.items) {
+        pi.push({
+          name: f.path.split("/").pop() || "Unknown",
+          path: f.path,
         });
-        const { url } = await getUrl({ path: key });
-        urls[key] = url.toString();
+        const { url } = await getUrl({ path: f.path });
+        urls[f.path] = url.toString();
       }
-      setProcessedImages(procItems);
+      setProcessedImages(pi);
       setProcessedImageUrls(urls);
     } catch (err) {
       console.error("Error fetching images:", err);
     }
   }
 
-  function viewImage(path: string) {
+  function viewUpload(path: string) {
     setSelectedImageName(path.split("/").pop() || null);
     setS3ProcessedUrl(null);
     setDetections(null);
@@ -73,7 +87,8 @@ function App() {
 
   function viewProcessed(path: string) {
     setS3ProcessedUrl(processedImageUrls[path]);
-    setDetections(null);
+    setSelectedImageName(null);
+    setDetections(processedDetections[path] || null);
   }
 
   async function processImage() {
@@ -82,32 +97,41 @@ function App() {
     try {
       const key = `uploads/${user?.userId}/${selectedImageName}`;
       const { url } = await getUrl({ path: key });
-      const blob = await fetch(url).then(r => r.blob());
+      const blob = await fetch(url).then((r) => r.blob());
       const form = new FormData();
       form.append("image", blob, selectedImageName);
       form.append("mode", mode);
-      const resp = await fetch(`${API_BASE}/detect`, { method: "POST", body: form });
-      const data = await resp.json();
-      if (resp.ok && data.s3_url) {
+
+      const r = await fetch(`${API_BASE}/detect`, {
+        method: "POST",
+        body: form,
+      });
+      const data = await r.json();
+      if (r.ok && data.s3_url) {
+        const procKey = `processed/${data.filename}`;
+        // store URL
         setS3ProcessedUrl(data.s3_url);
+        // store detections for this image
+        setProcessedDetections((prev) => ({
+          ...prev,
+          [procKey]: data.detections,
+        }));
         setDetections(data.detections);
         await fetchImages();
       } else {
-        console.warn("Detection error:", data);
+        console.warn("Detection failed:", data);
       }
-    } catch (err) {
-      console.error(err);
+    } catch (e) {
+      console.error("Detection error:", e);
     } finally {
       setIsProcessing(false);
     }
   }
 
-  // Single deleteImage for both uploads and processed
   async function deleteImage(path: string) {
     try {
-      await remove(path);
+      await remove({ path });
       await fetchImages();
-      // clear viewer if that item was showing
       if (processedImageUrls[path] === s3ProcessedUrl) {
         setS3ProcessedUrl(null);
         setDetections(null);
@@ -129,31 +153,47 @@ function App() {
           <button onClick={signOut}>Sign out</button>
         </div>
       </header>
+
       <div className="content">
         <div className="sidebar">
           <h2>Upload an Image</h2>
           <FileUploader
             acceptedFileTypes={["image/*"]}
             path={`uploads/${user?.userId}/`}
+            maxFileCount={1}
             isResumable
             onUploadSuccess={(evt) => {
               fetchImages();
-              viewImage(evt.key!);
+              viewUpload(evt.key!);
             }}
           />
 
           <h3>Your Uploads</h3>
           <table>
             <thead>
-              <tr><th>Name</th><th>Actions</th></tr>
+              <tr>
+                <th>Name</th>
+                <th>Actions</th>
+              </tr>
             </thead>
             <tbody>
-              {images.map(img => (
+              {images.map((img) => (
                 <tr key={img.path}>
-                  <td>{img.name.slice(0, 8)}</td>
+                  <td>{img.name}</td>
                   <td>
-                    <button onClick={() => viewImage(img.path)}>Select</button>
-                    <button onClick={() => deleteImage(img.path)}>Delete</button>
+                    <button
+                      style={actionButtonStyle}
+                      onClick={() => viewUpload(img.path)}
+                    >
+                      Select
+                    </button>
+                    <button
+                      style={actionButtonStyle}
+                      onClick={() => deleteImage(img.path)}
+                      aria-label="Delete upload"
+                    >
+                      <FaTrash />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -163,18 +203,37 @@ function App() {
           <h3>Processed Images</h3>
           <table>
             <thead>
-              <tr><th>Name</th><th>Actions</th></tr>
+              <tr>
+                <th>Filename</th>
+                <th>Actions</th>
+              </tr>
             </thead>
             <tbody>
-              {processedImages.map(img => (
+              {processedImages.map((img) => (
                 <tr key={img.path}>
                   <td>{img.name.slice(0, 8)}</td>
                   <td>
-                    <button onClick={() => viewProcessed(img.path)}>View</button>
-                    <a href={processedImageUrls[img.path]} download={img.name}>
-                      <button>Download</button>
+                    <button
+                      style={actionButtonStyle}
+                      onClick={() => viewProcessed(img.path)}
+                    >
+                      View
+                    </button>
+                    <a
+                      href={processedImageUrls[img.path]}
+                      download={img.name}
+                      style={actionButtonStyle}
+                      aria-label="Download processed image"
+                    >
+                      <FaDownload />
                     </a>
-                    <button onClick={() => deleteImage(img.path)}>Delete</button>
+                    <button
+                      style={actionButtonStyle}
+                      onClick={() => deleteImage(img.path)}
+                      aria-label="Delete processed image"
+                    >
+                      <FaTrash />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -183,41 +242,66 @@ function App() {
         </div>
 
         <div className="image-viewer">
-          <h2>Image Processing</h2>
-          {!selectedImageName && !s3ProcessedUrl ? (
+          <h2>Viewer</h2>
+          {!selectedImageName && !s3ProcessedUrl && (
             <p>Select or upload an image to process</p>
-          ) : (
+          )}
+
+          {selectedImageName && (
             <>
-              {selectedImageName && (
-                <p><strong>Selected:</strong> {selectedImageName}</p>
-              )}
+              <p>
+                <strong>Selected:</strong> {selectedImageName}
+              </p>
               <label>
                 Mode:
-                <select value={mode} onChange={e => setMode(e.target.value as any)}>
+                <select
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value as any)}
+                >
                   <option value="airplane">Airplane</option>
                   <option value="ship">Ship</option>
                   <option value="both">Both</option>
                 </select>
               </label>
-              {selectedImageName && (
-                <button onClick={processImage} disabled={isProcessing}>
-                  {isProcessing ? "Processing..." : "Run Detection"}
-                </button>
-              )}
-              {s3ProcessedUrl && (
-                <div>
-                  <h3>Result</h3>
-                  <img src={s3ProcessedUrl} alt="Result" style={{ maxWidth: "100%" }} />
-                  {detections && (
-                    <ul>
+              <button onClick={processImage} disabled={isProcessing}>
+                {isProcessing ? "Processing..." : "Run Detection"}
+              </button>
+            </>
+          )}
+
+          {s3ProcessedUrl && (
+            <>
+              <img
+                src={s3ProcessedUrl}
+                alt="Processed"
+                style={{ maxWidth: "100%", marginBottom: "16px" }}
+              />
+
+              {detections && (
+                <>
+                  <h4>Detected Objects</h4>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Class</th>
+                        <th>Confidence</th>
+                        <th>Bounding Box</th>
+                      </tr>
+                    </thead>
+                    <tbody>
                       {detections.map((d, i) => (
-                        <li key={i}>
-                          <strong>{d.class}</strong> – {(d.confidence * 100).toFixed(1)}%
-                        </li>
+                        <tr key={i}>
+                          <td>{d.class}</td>
+                          <td>{(d.confidence * 100).toFixed(1)}%</td>
+                          <td>
+                            [{d.bbox[0]}, {d.bbox[1]}, {d.bbox[2]},{" "}
+                            {d.bbox[3]}]
+                          </td>
+                        </tr>
                       ))}
-                    </ul>
-                  )}
-                </div>
+                    </tbody>
+                  </table>
+                </>
               )}
             </>
           )}
