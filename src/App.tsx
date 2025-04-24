@@ -36,6 +36,7 @@ function App() {
 
   async function fetchImages() {
     try {
+      // list user uploads
       const uploadedResult = await list({ path: `uploads/${user?.userId}/` });
       const uploadedList = uploadedResult.items.map((file) => ({
         name: file.path.split("/").pop() || "Unknown",
@@ -43,6 +44,7 @@ function App() {
       }));
       setImages(uploadedList);
 
+      // list processed files
       const processedResult = await list({ path: "processed/" });
       const processedList: ImageItem[] = [];
       const urls: { [key: string]: string } = {};
@@ -93,7 +95,7 @@ function App() {
       if (response.ok && data.s3_url) {
         setS3ProcessedUrl(data.s3_url);
         setDetections(data.detections);
-        fetchImages();
+        await fetchImages();
       } else {
         console.warn("Detection failed or incomplete response:", data);
       }
@@ -107,7 +109,7 @@ function App() {
   async function deleteImage(path: string) {
     try {
       await remove({ path });
-      setImages(images.filter((img) => img.path !== path));
+      await fetchImages();
       setSelectedImageName(null);
       setS3ProcessedUrl(null);
       setDetections(null);
@@ -119,13 +121,9 @@ function App() {
   async function deleteProcessedImage(path: string) {
     try {
       await remove({ path });
-      setProcessedImages(processedImages.filter((img) => img.path !== path));
-      setProcessedImageUrls((urls) => {
-        const copy = { ...urls };
-        delete copy[path];
-        return copy;
-      });
-      if (s3ProcessedUrl && processedImageUrls[path] === s3ProcessedUrl) {
+      await fetchImages();
+      // If the currently displayed result was this one, clear it
+      if (s3ProcessedUrl === processedImageUrls[path]) {
         setS3ProcessedUrl(null);
         setDetections(null);
       }
@@ -152,9 +150,9 @@ function App() {
             path={`uploads/${user?.userId}/`}
             maxFileCount={1}
             isResumable
-            onUploadSuccess={(event) => {
+            onUploadSuccess={(evt) => {
               fetchImages();
-              viewImage(event.key!);
+              viewImage(evt.key!);
             }}
           />
 
