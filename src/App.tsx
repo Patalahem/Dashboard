@@ -116,6 +116,24 @@ function App() {
     }
   }
 
+  async function deleteProcessedImage(path: string) {
+    try {
+      await remove({ path });
+      setProcessedImages(processedImages.filter((img) => img.path !== path));
+      setProcessedImageUrls((urls) => {
+        const copy = { ...urls };
+        delete copy[path];
+        return copy;
+      });
+      if (s3ProcessedUrl && processedImageUrls[path] === s3ProcessedUrl) {
+        setS3ProcessedUrl(null);
+        setDetections(null);
+      }
+    } catch (error) {
+      console.error("Error deleting processed image:", error);
+    }
+  }
+
   return (
     <div className="container">
       <header className="header">
@@ -166,6 +184,7 @@ function App() {
               <tr>
                 <th>Filename</th>
                 <th>Preview</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -182,6 +201,11 @@ function App() {
                     ) : (
                       "Loading..."
                     )}
+                  </td>
+                  <td>
+                    <button onClick={() => deleteProcessedImage(img.path)}>
+                      Delete
+                    </button>
                   </td>
                 </tr>
               ))}
