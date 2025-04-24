@@ -106,29 +106,22 @@ function App() {
     }
   }
 
+  // Single delete function works for both uploads/ and processed/
   async function deleteImage(path: string) {
     try {
       await remove({ path });
       await fetchImages();
-      setSelectedImageName(null);
-      setS3ProcessedUrl(null);
-      setDetections(null);
-    } catch (error) {
-      console.error("Error deleting image:", error);
-    }
-  }
-
-  async function deleteProcessedImage(path: string) {
-    try {
-      await remove({ path });
-      await fetchImages();
-      // If the currently displayed result was this one, clear it
-      if (s3ProcessedUrl === processedImageUrls[path]) {
+      // If we deleted the currently displayed processed image, clear it
+      if (processedImageUrls[path] === s3ProcessedUrl) {
         setS3ProcessedUrl(null);
         setDetections(null);
       }
+      // If we deleted the selected upload, clear selection
+      if (selectedImageName && path.endsWith(selectedImageName)) {
+        setSelectedImageName(null);
+      }
     } catch (error) {
-      console.error("Error deleting processed image:", error);
+      console.error("Error deleting image:", error);
     }
   }
 
@@ -201,9 +194,7 @@ function App() {
                     )}
                   </td>
                   <td>
-                    <button onClick={() => deleteProcessedImage(img.path)}>
-                      Delete
-                    </button>
+                    <button onClick={() => deleteImage(img.path)}>Delete</button>
                   </td>
                 </tr>
               ))}
