@@ -43,6 +43,7 @@ function App() {
   const [mode, setMode] = useState<"airplane" | "ship" | "both" | "combinedModel">("both");
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // your App Runner domain
   const API_BASE = "https://7m4p3mvyjr.us-east-1.awsapprunner.com";
 
   useEffect(() => {
@@ -51,7 +52,7 @@ function App() {
 
   async function fetchImages() {
     try {
-      // list uploads
+      // === 1) list your uploads ===
       const up = await list({ path: `uploads/${user?.userId}/` });
       setImages(
         up.items.map((f) => ({
@@ -60,20 +61,51 @@ function App() {
         }))
       );
 
-      // list processed
+      // === 2) list *all* processed/ objects ===
       const pr = await list({ path: "processed/" });
-      const pi: ImageItem[] = [];
-      const urls: { [key: string]: string } = {};
-      for (const f of pr.items) {
-        pi.push({
-          name: f.path.split("/").pop() || "Unknown",
-          path: f.path,
-        });
-        const { url } = await getUrl({ path: f.path });
-        urls[f.path] = url.toString();
-      }
-      setProcessedImages(pi);
+
+      // === 3) filter to only images by extension ===
+      const imageFiles = pr.items.filter((f) =>
+        /\.(?:jpe?g|png|gif)$/i.test(f.path.split("/").pop() || "")
+      );
+
+      // containers for what we’ll load
+      const urls: Record<string, string> = {};
+      const dets: Record<string, Detection[]> = {};
+      const imgs: ImageItem[] = [];
+
+      // === 4) preload each image’s URL + its JSON detections ===
+      await Promise.all(
+        imageFiles.map(async (f) => {
+          const name = f.path.split("/").pop()!;
+          imgs.push({ name, path: f.path });
+
+          // fetch the public URL for the annotated image
+          const { url: imgUrl } = await getUrl({ path: f.path });
+          urls[f.path] = imgUrl.toString();
+
+          // derive the matching JSON key and fetch it
+          // e.g.  test_combined_annotated.jpg  → base = test_combined
+          const base = name.replace(/_annotated\.\w+$/i, "");
+          const jsonKey = `processed/${base}_detections.json`;
+
+          try {
+            const { url: jurl } = await getUrl({ path: jsonKey });
+            const data: Detection[] = await fetch(jurl.toString()).then((r) =>
+              r.json()
+            );
+            dets[f.path] = data;
+          } catch {
+            // if no JSON file exists, just store empty array
+            dets[f.path] = [];
+          }
+        })
+      );
+
+      // === 5) commit to state ===
+      setProcessedImages(imgs);
       setProcessedImageUrls(urls);
+      setProcessedDetections(dets);
     } catch (err) {
       console.error("Error fetching images:", err);
     }
@@ -86,7 +118,7 @@ function App() {
   }
 
   function viewProcessed(path: string) {
-    setS3ProcessedUrl(processedImageUrls[path]);
+    setS3ProcessedUrl(processedImageUrls[path] || null);
     setDetections(processedDetections[path] || null);
     setSelectedImageName(null);
   }
@@ -109,13 +141,10 @@ function App() {
       const data = await r.json();
       if (r.ok && data.s3_url) {
         const procKey = `processed/${data.filename}`;
-        // store URL
+        // stitch it into our preloaded maps
+        setProcessedImageUrls((u) => ({ ...u, [procKey]: data.s3_url }));
+        setProcessedDetections((d) => ({ ...d, [procKey]: data.detections }));
         setS3ProcessedUrl(data.s3_url);
-        // store detections for this image
-        setProcessedDetections((prev) => ({
-          ...prev,
-          [procKey]: data.detections,
-        }));
         setDetections(data.detections);
         await fetchImages();
       } else {
