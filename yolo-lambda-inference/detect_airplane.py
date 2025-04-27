@@ -27,5 +27,6 @@ def run_detection(image_path):
 
     return {
         "detections": detections,
-        "annotated_path": output_image
+        "annotated_path": output_image,
+        "json_path":      output_json
     }

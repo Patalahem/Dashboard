@@ -40,7 +40,7 @@ function App() {
   const [selectedImageName, setSelectedImageName] = useState<string | null>(null);
   const [s3ProcessedUrl, setS3ProcessedUrl] = useState<string | null>(null);
   const [detections, setDetections] = useState<Detection[] | null>(null);
-  const [mode, setMode] = useState<"airplane" | "ship" | "both">("both");
+  const [mode, setMode] = useState<"airplane" | "ship" | "both" | "combinedModel">("both");
   const [isProcessing, setIsProcessing] = useState(false);
 
   const API_BASE = "https://7m4p3mvyjr.us-east-1.awsapprunner.com";
@@ -87,8 +87,8 @@ function App() {
 
   function viewProcessed(path: string) {
     setS3ProcessedUrl(processedImageUrls[path]);
-    setSelectedImageName(null);
     setDetections(processedDetections[path] || null);
+    setSelectedImageName(null);
   }
 
   async function processImage() {
@@ -261,6 +261,7 @@ function App() {
                   <option value="airplane">Airplane</option>
                   <option value="ship">Ship</option>
                   <option value="both">Both</option>
+                  <option value="combinedModel">Combined</option>
                 </select>
               </label>
               <button onClick={processImage} disabled={isProcessing}>
@@ -294,8 +295,7 @@ function App() {
                           <td>{d.class}</td>
                           <td>{(d.confidence * 100).toFixed(1)}%</td>
                           <td>
-                            [{d.bbox[0]}, {d.bbox[1]}, {d.bbox[2]},{" "}
-                            {d.bbox[3]}]
+                            [{d.bbox[0]}, {d.bbox[1]}, {d.bbox[2]}, {d.bbox[3]}]
                           </td>
                         </tr>
                       ))}
