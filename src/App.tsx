@@ -30,6 +30,15 @@ const actionButtonStyle: React.CSSProperties = {
 
 function App() {
   const { user, signOut } = useAuthenticator();
+  useEffect(() => {
+    if (user) {
+      const email = user?.signInDetails?.loginId;
+      if (email && !email.endsWith("@udel.edu")) {
+        alert("Access restricted to udel.edu emails only.");
+        signOut();
+      }
+    }
+  }, [user]);
 
   const [images, setImages] = useState<ImageItem[]>([]);
   const [processedImages, setProcessedImages] = useState<ImageItem[]>([]);

@@ -19,5 +19,6 @@ def run_combined(image_path):
 
     return {
         "detections": all_detections,
-        "annotated_path": output_image
+        "annotated_path": output_image,
+        "json_path":      output_json
     }
