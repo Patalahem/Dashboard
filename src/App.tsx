@@ -133,20 +133,21 @@ function App() {
       const form = new FormData();
       form.append("image", blob, selectedImageName);
       form.append("mode", mode);
-
+  
       const r = await fetch(`${API_BASE}/detect`, {
         method: "POST",
         body: form,
       });
       const data = await r.json();
+  
       if (r.ok && data.s3_url) {
+        // ✅ Important: reload ALL processed images after detection
+        await fetchImages();
+  
+        // ✅ Set view to the new processed image
         const procKey = `processed/${data.filename}`;
-        // stitch it into our preloaded maps
-        setProcessedImageUrls((u) => ({ ...u, [procKey]: data.s3_url }));
-        setProcessedDetections((d) => ({ ...d, [procKey]: data.detections }));
         setS3ProcessedUrl(data.s3_url);
         setDetections(data.detections);
-        await fetchImages();
       } else {
         console.warn("Detection failed:", data);
       }
@@ -156,6 +157,7 @@ function App() {
       setIsProcessing(false);
     }
   }
+  
 
   async function deleteImage(path: string) {
     try {
