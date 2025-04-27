@@ -145,7 +145,6 @@ function App() {
         await fetchImages();
   
         // ✅ Set view to the new processed image
-        const procKey = `processed/${data.filename}`;
         setS3ProcessedUrl(data.s3_url);
         setDetections(data.detections);
       } else {
