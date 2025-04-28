@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import { getUrl, list, remove } from "aws-amplify/storage";
 import { FileUploader } from "@aws-amplify/ui-react-storage";
-import { FaDownload, FaTrash } from "react-icons/fa";
+import { FaDownload, FaTrash, FaChevronDown, FaChevronRight } from "react-icons/fa";
 import "@aws-amplify/ui-react/styles.css";
 import "./index.css";
 
@@ -17,9 +17,8 @@ interface Detection {
   bbox: [number, number, number, number];
 }
 
-// common button style
 const actionButtonStyle: React.CSSProperties = {
-  backgroundColor: "#555", // darkish gray
+  backgroundColor: "#555",
   color: "#fff",
   border: "none",
   padding: "6px",
@@ -30,6 +29,24 @@ const actionButtonStyle: React.CSSProperties = {
 
 function App() {
   const { user, signOut } = useAuthenticator();
+
+  const [images, setImages] = useState<ImageItem[]>([]);
+  const [processedImages, setProcessedImages] = useState<ImageItem[]>([]);
+  const [processedImageUrls, setProcessedImageUrls] = useState<{ [key: string]: string }>({});
+  const [processedDetections, setProcessedDetections] = useState<{ [key: string]: Detection[] }>({});
+  const [jsonFiles, setJsonFiles] = useState<ImageItem[]>([]);
+  const [jsonFileUrls, setJsonFileUrls] = useState<{ [key: string]: string }>({});
+  const [selectedImageName, setSelectedImageName] = useState<string | null>(null);
+  const [s3ProcessedUrl, setS3ProcessedUrl] = useState<string | null>(null);
+  const [detections, setDetections] = useState<Detection[] | null>(null);
+  const [mode, setMode] = useState<"airplane" | "ship" | "both" | "combinedModel">("both");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadsExpanded, setUploadsExpanded] = useState(true);
+  const [processedExpanded, setProcessedExpanded] = useState(false);
+  const [jsonExpanded, setJsonExpanded] = useState(false);
+
+  const API_BASE = "https://7m4p3mvyjr.us-east-1.awsapprunner.com";
+
   useEffect(() => {
     if (user) {
       const email = user?.signInDetails?.loginId;
@@ -40,81 +57,64 @@ function App() {
     }
   }, [user]);
 
-  const [images, setImages] = useState<ImageItem[]>([]);
-  const [processedImages, setProcessedImages] = useState<ImageItem[]>([]);
-  const [processedImageUrls, setProcessedImageUrls] = useState<{ [key: string]: string }>({});
-  const [processedDetections, setProcessedDetections] = useState<{
-    [key: string]: Detection[];
-  }>({});
-  const [selectedImageName, setSelectedImageName] = useState<string | null>(null);
-  const [s3ProcessedUrl, setS3ProcessedUrl] = useState<string | null>(null);
-  const [detections, setDetections] = useState<Detection[] | null>(null);
-  const [mode, setMode] = useState<"airplane" | "ship" | "both" | "combinedModel">("both");
-  const [isProcessing, setIsProcessing] = useState(false);
-
-  // your App Runner domain
-  const API_BASE = "https://7m4p3mvyjr.us-east-1.awsapprunner.com";
-
   useEffect(() => {
     fetchImages();
   }, []);
 
   async function fetchImages() {
     try {
-      // === 1) list your uploads ===
       const up = await list({ path: `uploads/${user?.userId}/` });
-      setImages(
-        up.items.map((f) => ({
-          name: f.path.split("/").pop() || "Unknown",
-          path: f.path,
-        }))
-      );
+      setImages(up.items.map((f) => ({
+        name: f.path.split("/").pop() || "Unknown",
+        path: f.path,
+      })));
 
-      // === 2) list *all* processed/ objects ===
       const pr = await list({ path: "processed/" });
 
-      // === 3) filter to only images by extension ===
-      const imageFiles = pr.items.filter((f) =>
-        /\.(?:jpe?g|png|gif)$/i.test(f.path.split("/").pop() || "")
-      );
+      const imageFiles = pr.items.filter((f) => /\.(?:jpe?g|png|gif)$/i.test(f.path.split("/").pop() || ""));
+      const jsonFiles = pr.items.filter((f) => /\.json$/i.test(f.path.split("/").pop() || ""));
 
-      // containers for what we’ll load
+      const imgs: ImageItem[] = [];
       const urls: Record<string, string> = {};
       const dets: Record<string, Detection[]> = {};
-      const imgs: ImageItem[] = [];
 
-      // === 4) preload each image’s URL + its JSON detections ===
       await Promise.all(
         imageFiles.map(async (f) => {
           const name = f.path.split("/").pop()!;
           imgs.push({ name, path: f.path });
 
-          // fetch the public URL for the annotated image
           const { url: imgUrl } = await getUrl({ path: f.path });
           urls[f.path] = imgUrl.toString();
 
-          // derive the matching JSON key and fetch it
-          // e.g.  test_combined_annotated.jpg  → base = test_combined
           const base = name.replace(/_annotated\.\w+$/i, "");
           const jsonKey = `processed/${base}_detections.json`;
 
           try {
             const { url: jurl } = await getUrl({ path: jsonKey });
-            const data: Detection[] = await fetch(jurl.toString()).then((r) =>
-              r.json()
-            );
+            const data: Detection[] = await fetch(jurl.toString()).then((r) => r.json());
             dets[f.path] = data;
           } catch {
-            // if no JSON file exists, just store empty array
             dets[f.path] = [];
           }
         })
       );
 
-      // === 5) commit to state ===
       setProcessedImages(imgs);
       setProcessedImageUrls(urls);
       setProcessedDetections(dets);
+
+      setJsonFiles(jsonFiles.map((f) => ({
+        name: f.path.split("/").pop() || "Unknown",
+        path: f.path,
+      })));
+
+      const jsonUrls: Record<string, string> = {};
+      for (const f of jsonFiles) {
+        const { url } = await getUrl({ path: f.path });
+        jsonUrls[f.path] = url.toString();
+      }
+      setJsonFileUrls(jsonUrls);
+
     } catch (err) {
       console.error("Error fetching images:", err);
     }
@@ -142,18 +142,12 @@ function App() {
       const form = new FormData();
       form.append("image", blob, selectedImageName);
       form.append("mode", mode);
-  
-      const r = await fetch(`${API_BASE}/detect`, {
-        method: "POST",
-        body: form,
-      });
+
+      const r = await fetch(`${API_BASE}/detect`, { method: "POST", body: form });
       const data = await r.json();
-  
+
       if (r.ok && data.s3_url) {
-        // ✅ Important: reload ALL processed images after detection
         await fetchImages();
-  
-        // ✅ Set view to the new processed image
         setS3ProcessedUrl(data.s3_url);
         setDetections(data.detections);
       } else {
@@ -165,11 +159,19 @@ function App() {
       setIsProcessing(false);
     }
   }
-  
 
   async function deleteImage(path: string) {
     try {
       await remove({ path });
+      if (path.includes("_annotated")) {
+        const base = path.replace(/_annotated\.\w+$/i, "");
+        const jsonPath = `processed/${base}_detections.json`;
+        try {
+          await remove({ path: jsonPath });
+        } catch (e) {
+          console.warn("JSON file not found for deletion.");
+        }
+      }
       await fetchImages();
       if (processedImageUrls[path] === s3ProcessedUrl) {
         setS3ProcessedUrl(null);
@@ -207,96 +209,99 @@ function App() {
             }}
           />
 
-          <h3>Your Uploads</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {images.map((img) => (
-                <tr key={img.path}>
-                  <td>{img.name}</td>
-                  <td>
-                    <button
-                      style={actionButtonStyle}
-                      onClick={() => viewUpload(img.path)}
-                    >
-                      Select
-                    </button>
-                    <button
-                      style={actionButtonStyle}
-                      onClick={() => deleteImage(img.path)}
-                      aria-label="Delete upload"
-                    >
-                      <FaTrash />
-                    </button>
-                  </td>
+          {/* Uploads Table */}
+          <h3 onClick={() => setUploadsExpanded(!uploadsExpanded)} style={{ cursor: "pointer" }}>
+            {uploadsExpanded ? <FaChevronDown /> : <FaChevronRight />} Your Uploads
+          </h3>
+          {uploadsExpanded && (
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {images.map((img) => (
+                  <tr key={img.path}>
+                    <td>{img.name}</td>
+                    <td>
+                      <button style={actionButtonStyle} onClick={() => viewUpload(img.path)}>Select</button>
+                      <button style={actionButtonStyle} onClick={() => deleteImage(img.path)}><FaTrash /></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
 
-          <h3>Processed Images</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Filename</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {processedImages.map((img) => (
-                <tr key={img.path}>
-                  <td>{img.name.slice(0, 8)}</td>
-                  <td>
-                    <button
-                      style={actionButtonStyle}
-                      onClick={() => viewProcessed(img.path)}
-                    >
-                      View
-                    </button>
-                    <a
-                      href={processedImageUrls[img.path]}
-                      download={img.name}
-                      style={actionButtonStyle}
-                      aria-label="Download processed image"
-                    >
-                      <FaDownload />
-                    </a>
-                    <button
-                      style={actionButtonStyle}
-                      onClick={() => deleteImage(img.path)}
-                      aria-label="Delete processed image"
-                    >
-                      <FaTrash />
-                    </button>
-                  </td>
+          {/* Processed Images Table */}
+          <h3 onClick={() => setProcessedExpanded(!processedExpanded)} style={{ cursor: "pointer" }}>
+            {processedExpanded ? <FaChevronDown /> : <FaChevronRight />} Processed Images
+          </h3>
+          {processedExpanded && (
+            <table>
+              <thead>
+                <tr>
+                  <th>Filename</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {processedImages.map((img) => (
+                  <tr key={img.path}>
+                    <td>{img.name.slice(0, 8)}</td>
+                    <td>
+                      <button style={actionButtonStyle} onClick={() => viewProcessed(img.path)}>View</button>
+                      <a href={processedImageUrls[img.path]} download={img.name} style={actionButtonStyle}><FaDownload /></a>
+                      <button style={actionButtonStyle} onClick={() => deleteImage(img.path)}><FaTrash /></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {/* JSON Files Table */}
+          <h3 onClick={() => setJsonExpanded(!jsonExpanded)} style={{ cursor: "pointer" }}>
+            {jsonExpanded ? <FaChevronDown /> : <FaChevronRight />} JSON Files
+          </h3>
+          {jsonExpanded && (
+            <table>
+              <thead>
+                <tr>
+                  <th>Filename</th>
+                  <th>Download</th>
+                </tr>
+              </thead>
+              <tbody>
+                {jsonFiles.map((file) => (
+                  <tr key={file.path}>
+                    <td>{file.name}</td>
+                    <td>
+                      <a href={jsonFileUrls[file.path]} download={file.name} style={actionButtonStyle}>
+                        <FaDownload />
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
 
+        {/* Image Viewer */}
         <div className="image-viewer">
           <h2>Viewer</h2>
           {!selectedImageName && !s3ProcessedUrl && (
             <p>Select or upload an image to process</p>
           )}
-
           {selectedImageName && (
             <>
-              <p>
-                <strong>Selected:</strong> {selectedImageName}
-              </p>
+              <p><strong>Selected:</strong> {selectedImageName}</p>
               <label>
                 Mode:
-                <select
-                  value={mode}
-                  onChange={(e) => setMode(e.target.value as any)}
-                >
+                <select value={mode} onChange={(e) => setMode(e.target.value as any)}>
                   <option value="airplane">Airplane</option>
                   <option value="ship">Ship</option>
                   <option value="both">Both</option>
@@ -308,15 +313,9 @@ function App() {
               </button>
             </>
           )}
-
           {s3ProcessedUrl && (
             <>
-              <img
-                src={s3ProcessedUrl}
-                alt="Processed"
-                style={{ maxWidth: "100%", marginBottom: "16px" }}
-              />
-
+              <img src={s3ProcessedUrl} alt="Processed" style={{ maxWidth: "100%", marginBottom: "16px" }} />
               {detections && (
                 <>
                   <h4>Detected Objects</h4>
@@ -333,9 +332,7 @@ function App() {
                         <tr key={i}>
                           <td>{d.class}</td>
                           <td>{(d.confidence * 100).toFixed(1)}%</td>
-                          <td>
-                            [{d.bbox[0]}, {d.bbox[1]}, {d.bbox[2]}, {d.bbox[3]}]
-                          </td>
+                          <td>[{d.bbox.join(", ")}]</td>
                         </tr>
                       ))}
                     </tbody>
