@@ -21,10 +21,21 @@ const actionButtonStyle: React.CSSProperties = {
   backgroundColor: "#555",
   color: "#fff",
   border: "none",
-  padding: "6px",
+  padding: "4px",
   borderRadius: "4px",
   cursor: "pointer",
   margin: "0 4px",
+  height: "24px",
+  width: "24px",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const checkboxStyle: React.CSSProperties = {
+  width: "20px",
+  height: "20px",
+  verticalAlign: "middle",
 };
 
 function App() {
@@ -39,6 +50,7 @@ function App() {
   const [selectedImageName, setSelectedImageName] = useState<string | null>(null);
   const [s3ProcessedUrl, setS3ProcessedUrl] = useState<string | null>(null);
   const [detections, setDetections] = useState<Detection[] | null>(null);
+  const [selectedProcessedPaths, setSelectedProcessedPaths] = useState<string[]>([]);
   const [mode, setMode] = useState<"airplane" | "ship" | "both" | "combinedModel">("both");
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadsExpanded, setUploadsExpanded] = useState(true);
@@ -64,13 +76,9 @@ function App() {
   async function fetchImages() {
     try {
       const up = await list({ path: `uploads/${user?.userId}/` });
-      setImages(up.items.map((f) => ({
-        name: f.path.split("/").pop() || "Unknown",
-        path: f.path,
-      })));
+      setImages(up.items.map((f) => ({ name: f.path.split("/").pop() || "Unknown", path: f.path })));
 
       const pr = await list({ path: "processed/" });
-
       const imageFiles = pr.items.filter((f) => /\.(?:jpe?g|png|gif)$/i.test(f.path.split("/").pop() || ""));
       const jsonFiles = pr.items.filter((f) => /\.json$/i.test(f.path.split("/").pop() || ""));
 
@@ -103,10 +111,7 @@ function App() {
       setProcessedImageUrls(urls);
       setProcessedDetections(dets);
 
-      setJsonFiles(jsonFiles.map((f) => ({
-        name: f.path.split("/").pop() || "Unknown",
-        path: f.path,
-      })));
+      setJsonFiles(jsonFiles.map((f) => ({ name: f.path.split("/").pop() || "Unknown", path: f.path })));
 
       const jsonUrls: Record<string, string> = {};
       for (const f of jsonFiles) {
@@ -114,22 +119,9 @@ function App() {
         jsonUrls[f.path] = url.toString();
       }
       setJsonFileUrls(jsonUrls);
-
     } catch (err) {
       console.error("Error fetching images:", err);
     }
-  }
-
-  function viewUpload(path: string) {
-    setSelectedImageName(path.split("/").pop() || null);
-    setS3ProcessedUrl(null);
-    setDetections(null);
-  }
-
-  function viewProcessed(path: string) {
-    setS3ProcessedUrl(processedImageUrls[path] || null);
-    setDetections(processedDetections[path] || null);
-    setSelectedImageName(null);
   }
 
   async function processImage() {
@@ -205,28 +197,33 @@ function App() {
             isResumable
             onUploadSuccess={(evt) => {
               fetchImages();
-              viewUpload(evt.key!);
+              setSelectedImageName(evt.key!.split("/").pop() || null);
+              setSelectedProcessedPaths([]);
+              setS3ProcessedUrl(null);
+              setDetections(null);
             }}
           />
 
-          {/* Uploads Table */}
           <h3 onClick={() => setUploadsExpanded(!uploadsExpanded)} style={{ cursor: "pointer" }}>
             {uploadsExpanded ? <FaChevronDown /> : <FaChevronRight />} Your Uploads
           </h3>
           {uploadsExpanded && (
             <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Name</th><th>Actions</th></tr></thead>
               <tbody>
                 {images.map((img) => (
                   <tr key={img.path}>
                     <td>{img.name}</td>
                     <td>
-                      <button style={actionButtonStyle} onClick={() => viewUpload(img.path)}>Select</button>
+                      <button
+                        style={actionButtonStyle}
+                        onClick={() => {
+                          setSelectedImageName(img.name);
+                          setSelectedProcessedPaths([]);
+                          setS3ProcessedUrl(null);
+                          setDetections(null);
+                        }}
+                      >Select</button>
                       <button style={actionButtonStyle} onClick={() => deleteImage(img.path)}><FaTrash /></button>
                     </td>
                   </tr>
@@ -235,24 +232,32 @@ function App() {
             </table>
           )}
 
-          {/* Processed Images Table */}
           <h3 onClick={() => setProcessedExpanded(!processedExpanded)} style={{ cursor: "pointer" }}>
             {processedExpanded ? <FaChevronDown /> : <FaChevronRight />} Processed Images
           </h3>
           {processedExpanded && (
             <table>
-              <thead>
-                <tr>
-                  <th>Filename</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Select</th><th>Actions</th></tr></thead>
               <tbody>
                 {processedImages.map((img) => (
-                  <tr key={img.path}>
-                    <td>{img.name.slice(0, 8)}</td>
+                  <tr key={img.path} style={{ verticalAlign: "middle" }}>
+                    <td style={{ display: "flex", alignItems: "center" }}>
+                      <input
+                        type="checkbox"
+                        style={checkboxStyle}
+                        checked={selectedProcessedPaths.includes(img.path)}
+                        onChange={() => {
+                          setSelectedImageName(null);
+                          setSelectedProcessedPaths((prev) => {
+                            if (prev.includes(img.path)) return prev.filter(p => p !== img.path);
+                            if (prev.length >= 3) return prev;
+                            return [...prev, img.path];
+                          });
+                        }}
+                      />
+                      <span style={{ marginLeft: "6px" }}>{img.name.slice(0, 8)}</span>
+                    </td>
                     <td>
-                      <button style={actionButtonStyle} onClick={() => viewProcessed(img.path)}>View</button>
                       <a href={processedImageUrls[img.path]} download={img.name} style={actionButtonStyle}><FaDownload /></a>
                       <button style={actionButtonStyle} onClick={() => deleteImage(img.path)}><FaTrash /></button>
                     </td>
@@ -262,26 +267,18 @@ function App() {
             </table>
           )}
 
-          {/* JSON Files Table */}
           <h3 onClick={() => setJsonExpanded(!jsonExpanded)} style={{ cursor: "pointer" }}>
             {jsonExpanded ? <FaChevronDown /> : <FaChevronRight />} JSON Files
           </h3>
           {jsonExpanded && (
             <table>
-              <thead>
-                <tr>
-                  <th>Filename</th>
-                  <th>Download</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Filename</th><th>Download</th></tr></thead>
               <tbody>
                 {jsonFiles.map((file) => (
                   <tr key={file.path}>
                     <td>{file.name}</td>
                     <td>
-                      <a href={jsonFileUrls[file.path]} download={file.name} style={actionButtonStyle}>
-                        <FaDownload />
-                      </a>
+                      <a href={jsonFileUrls[file.path]} download={file.name} style={actionButtonStyle}><FaDownload /></a>
                     </td>
                   </tr>
                 ))}
@@ -290,13 +287,14 @@ function App() {
           )}
         </div>
 
-        {/* Image Viewer */}
         <div className="image-viewer">
-          <h2>Viewer</h2>
-          {!selectedImageName && !s3ProcessedUrl && (
-            <p>Select or upload an image to process</p>
+          <h2 style={{ textAlign: "left" }}>Viewer</h2>
+
+          {!selectedImageName && selectedProcessedPaths.length === 0 && (
+            <p>Select or upload an image to process or view</p>
           )}
-          {selectedImageName && (
+
+          {selectedImageName && selectedProcessedPaths.length === 0 && (
             <>
               <p><strong>Selected:</strong> {selectedImageName}</p>
               <label>
@@ -313,33 +311,34 @@ function App() {
               </button>
             </>
           )}
-          {s3ProcessedUrl && (
-            <>
-              <img src={s3ProcessedUrl} alt="Processed" style={{ maxWidth: "100%", marginBottom: "16px" }} />
-              {detections && (
-                <>
-                  <h4>Detected Objects</h4>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Class</th>
-                        <th>Confidence</th>
-                        <th>Bounding Box</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detections.map((d, i) => (
-                        <tr key={i}>
-                          <td>{d.class}</td>
-                          <td>{(d.confidence * 100).toFixed(1)}%</td>
-                          <td>[{d.bbox.join(", ")}]</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </>
-              )}
-            </>
+
+          {selectedProcessedPaths.length > 0 && (
+            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+              {selectedProcessedPaths.map((path) => (
+                <div key={path} style={{ flex: "1 1 30%", minWidth: "250px" }}>
+                  <img src={processedImageUrls[path]} alt="Processed" style={{ width: "100%", marginBottom: "8px" }} />
+                  {processedDetections[path] && (
+                    <>
+                      <h4>Detections</h4>
+                      <table>
+                        <thead>
+                          <tr><th>Class</th><th>Confidence</th><th>Bounding Box</th></tr>
+                        </thead>
+                        <tbody>
+                          {processedDetections[path].map((d, i) => (
+                            <tr key={i}>
+                              <td>{d.class}</td>
+                              <td>{(d.confidence * 100).toFixed(1)}%</td>
+                              <td>[{d.bbox.join(", ")}]</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>
