@@ -49,7 +49,7 @@ function App() {
   const [jsonFileUrls, setJsonFileUrls] = useState<{ [key: string]: string }>({});
   const [selectedImageName, setSelectedImageName] = useState<string | null>(null);
   const [s3ProcessedUrl, setS3ProcessedUrl] = useState<string | null>(null);
-  const [detections, setDetections] = useState<Detection[] | null>(null);
+  //const [detections, setDetections] = useState<Detection[] | null>(null);
   const [selectedProcessedPaths, setSelectedProcessedPaths] = useState<string[]>([]);
   const [mode, setMode] = useState<"airplane" | "ship" | "both" | "combinedModel">("both");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -141,7 +141,7 @@ function App() {
       if (r.ok && data.s3_url) {
         await fetchImages();
         setS3ProcessedUrl(data.s3_url);
-        setDetections(data.detections);
+        //setDetections(data.detections);
       } else {
         console.warn("Detection failed:", data);
       }
@@ -167,7 +167,7 @@ function App() {
       await fetchImages();
       if (processedImageUrls[path] === s3ProcessedUrl) {
         setS3ProcessedUrl(null);
-        setDetections(null);
+        //setDetections(null);
       }
       if (selectedImageName && path.endsWith(selectedImageName)) {
         setSelectedImageName(null);
@@ -200,7 +200,7 @@ function App() {
               setSelectedImageName(evt.key!.split("/").pop() || null);
               setSelectedProcessedPaths([]);
               setS3ProcessedUrl(null);
-              setDetections(null);
+              //setDetections(null);
             }}
           />
 
@@ -221,7 +221,7 @@ function App() {
                           setSelectedImageName(img.name);
                           setSelectedProcessedPaths([]);
                           setS3ProcessedUrl(null);
-                          setDetections(null);
+                          //setDetections(null);
                         }}
                       >Select</button>
                       <button style={actionButtonStyle} onClick={() => deleteImage(img.path)}><FaTrash /></button>
