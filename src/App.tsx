@@ -41,7 +41,10 @@ const checkboxStyle: React.CSSProperties = {
 function App() {
   const { user, signOut } = useAuthenticator();
 
+  // === STATES ===
   const [images, setImages] = useState<ImageItem[]>([]);
+  const [uploadUrls, setUploadUrls] = useState<{ [key: string]: string }>({});
+  const [selectedUploadPaths, setSelectedUploadPaths] = useState<string[]>([]);
   const [processedImages, setProcessedImages] = useState<ImageItem[]>([]);
   const [processedImageUrls, setProcessedImageUrls] = useState<{ [key: string]: string }>({});
   const [processedDetections, setProcessedDetections] = useState<{ [key: string]: Detection[] }>({});
@@ -49,7 +52,6 @@ function App() {
   const [jsonFileUrls, setJsonFileUrls] = useState<{ [key: string]: string }>({});
   const [selectedImageName, setSelectedImageName] = useState<string | null>(null);
   const [s3ProcessedUrl, setS3ProcessedUrl] = useState<string | null>(null);
-  //const [detections, setDetections] = useState<Detection[] | null>(null);
   const [selectedProcessedPaths, setSelectedProcessedPaths] = useState<string[]>([]);
   const [mode, setMode] = useState<"airplane" | "ship" | "both" | "combinedModel">("both");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -59,6 +61,7 @@ function App() {
 
   const API_BASE = "https://7m4p3mvyjr.us-east-1.awsapprunner.com";
 
+  // Restrict to udel.edu emails
   useEffect(() => {
     if (user) {
       const email = user?.signInDetails?.loginId;
@@ -69,18 +72,36 @@ function App() {
     }
   }, [user]);
 
+  // Initial load
   useEffect(() => {
     fetchImages();
   }, []);
 
+  // Fetch uploads, processed images, and JSONs
   async function fetchImages() {
     try {
+      // UPLOADS
       const up = await list({ path: `uploads/${user?.userId}/` });
       setImages(up.items.map((f) => ({ name: f.path.split("/").pop() || "Unknown", path: f.path })));
+      const uplinks: Record<string, string> = {};
+      await Promise.all(
+        up.items.map(async (f) => {
+          try {
+            const { url } = await getUrl({ path: f.path });
+            uplinks[f.path] = url.toString();
+          } catch {
+            uplinks[f.path] = "";
+          }
+        })
+      );
+      setUploadUrls(uplinks);
 
+      // PROCESSED IMAGES & DETECTIONS
       const pr = await list({ path: "processed/" });
-      const imageFiles = pr.items.filter((f) => /\.(?:jpe?g|png|gif)$/i.test(f.path.split("/").pop() || ""));
-      const jsonFiles = pr.items.filter((f) => /\.json$/i.test(f.path.split("/").pop() || ""));
+      const imageFiles = pr.items.filter((f) =>
+        /\.(?:jpe?g|png|gif)$/i.test(f.path.split("/").pop() || "")
+      );
+      const jsonOnly = pr.items.filter((f) => /\.json$/i.test(f.path.split("/").pop() || ""));
 
       const imgs: ImageItem[] = [];
       const urls: Record<string, string> = {};
@@ -90,13 +111,11 @@ function App() {
         imageFiles.map(async (f) => {
           const name = f.path.split("/").pop()!;
           imgs.push({ name, path: f.path });
-
           const { url: imgUrl } = await getUrl({ path: f.path });
           urls[f.path] = imgUrl.toString();
 
           const base = name.replace(/_annotated\.\w+$/i, "");
           const jsonKey = `processed/${base}_detections.json`;
-
           try {
             const { url: jurl } = await getUrl({ path: jsonKey });
             const data: Detection[] = await fetch(jurl.toString()).then((r) => r.json());
@@ -111,19 +130,22 @@ function App() {
       setProcessedImageUrls(urls);
       setProcessedDetections(dets);
 
-      setJsonFiles(jsonFiles.map((f) => ({ name: f.path.split("/").pop() || "Unknown", path: f.path })));
-
-      const jsonUrls: Record<string, string> = {};
-      for (const f of jsonFiles) {
-        const { url } = await getUrl({ path: f.path });
-        jsonUrls[f.path] = url.toString();
-      }
-      setJsonFileUrls(jsonUrls);
+      // JSON FILES
+      setJsonFiles(jsonOnly.map((f) => ({ name: f.path.split("/").pop() || "Unknown", path: f.path })));
+      const jurls: Record<string, string> = {};
+      await Promise.all(
+        jsonOnly.map(async (f) => {
+          const { url } = await getUrl({ path: f.path });
+          jurls[f.path] = url.toString();
+        })
+      );
+      setJsonFileUrls(jurls);
     } catch (err) {
       console.error("Error fetching images:", err);
     }
   }
 
+  // Single-image detection (unchanged)
   async function processImage() {
     if (!selectedImageName) return;
     setIsProcessing(true);
@@ -137,11 +159,9 @@ function App() {
 
       const r = await fetch(`${API_BASE}/detect`, { method: "POST", body: form });
       const data = await r.json();
-
       if (r.ok && data.s3_url) {
         await fetchImages();
         setS3ProcessedUrl(data.s3_url);
-        //setDetections(data.detections);
       } else {
         console.warn("Detection failed:", data);
       }
@@ -152,6 +172,37 @@ function App() {
     }
   }
 
+  // Batch detection for up to 3 uploads
+  async function processBatchImages() {
+    if (selectedUploadPaths.length === 0) return;
+    setIsProcessing(true);
+    try {
+      await Promise.all(
+        selectedUploadPaths.map(async (path) => {
+          const name = path.split("/").pop()!;
+          const { url } = await getUrl({ path });
+          const blob = await fetch(url).then((r) => r.blob());
+          const form = new FormData();
+          form.append("image", blob, name);
+          form.append("mode", mode);
+
+          const r = await fetch(`${API_BASE}/detect`, { method: "POST", body: form });
+          const data = await r.json();
+          if (!(r.ok && data.s3_url)) {
+            console.warn(`Detection failed for ${name}:`, data);
+          }
+        })
+      );
+      await fetchImages();
+      setSelectedUploadPaths([]);
+    } catch (e) {
+      console.error("Batch detection error:", e);
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
+  // Delete (unchanged)
   async function deleteImage(path: string) {
     try {
       await remove({ path });
@@ -160,14 +211,13 @@ function App() {
         const jsonPath = `processed/${base}_detections.json`;
         try {
           await remove({ path: jsonPath });
-        } catch (e) {
+        } catch {
           console.warn("JSON file not found for deletion.");
         }
       }
       await fetchImages();
       if (processedImageUrls[path] === s3ProcessedUrl) {
         setS3ProcessedUrl(null);
-        //setDetections(null);
       }
       if (selectedImageName && path.endsWith(selectedImageName)) {
         setSelectedImageName(null);
@@ -198,9 +248,9 @@ function App() {
             onUploadSuccess={(evt) => {
               fetchImages();
               setSelectedImageName(evt.key!.split("/").pop() || null);
+              setSelectedUploadPaths([]);
               setSelectedProcessedPaths([]);
               setS3ProcessedUrl(null);
-              //setDetections(null);
             }}
           />
 
@@ -209,22 +259,43 @@ function App() {
           </h3>
           {uploadsExpanded && (
             <table>
-              <thead><tr><th>Name</th><th>Actions</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Select</th>
+                  <th>Name</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
               <tbody>
                 {images.map((img) => (
-                  <tr key={img.path}>
-                    <td>{img.name}</td>
+                  <tr key={img.path} style={{ verticalAlign: "middle" }}>
                     <td>
-                      <button
-                        style={actionButtonStyle}
-                        onClick={() => {
-                          setSelectedImageName(img.name);
+                      <input
+                        type="checkbox"
+                        style={checkboxStyle}
+                        checked={selectedUploadPaths.includes(img.path)}
+                        onChange={() => {
+                          setSelectedImageName(null);
                           setSelectedProcessedPaths([]);
                           setS3ProcessedUrl(null);
-                          //setDetections(null);
+                          setSelectedUploadPaths((prev) => {
+                            if (prev.includes(img.path)) {
+                              return prev.filter((p) => p !== img.path);
+                            }
+                            if (prev.length >= 3) {
+                              alert("You can select up to 3 images.");
+                              return prev;
+                            }
+                            return [...prev, img.path];
+                          });
                         }}
-                      >Select</button>
-                      <button style={actionButtonStyle} onClick={() => deleteImage(img.path)}><FaTrash /></button>
+                      />
+                    </td>
+                    <td>{img.name}</td>
+                    <td>
+                      <button style={actionButtonStyle} onClick={() => deleteImage(img.path)}>
+                        <FaTrash />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -237,7 +308,12 @@ function App() {
           </h3>
           {processedExpanded && (
             <table>
-              <thead><tr><th>Select</th><th>Actions</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Select</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
               <tbody>
                 {processedImages.map((img) => (
                   <tr key={img.path} style={{ verticalAlign: "middle" }}>
@@ -248,8 +324,10 @@ function App() {
                         checked={selectedProcessedPaths.includes(img.path)}
                         onChange={() => {
                           setSelectedImageName(null);
+                          setSelectedUploadPaths([]);
+                          setS3ProcessedUrl(null);
                           setSelectedProcessedPaths((prev) => {
-                            if (prev.includes(img.path)) return prev.filter(p => p !== img.path);
+                            if (prev.includes(img.path)) return prev.filter((p) => p !== img.path);
                             if (prev.length >= 3) return prev;
                             return [...prev, img.path];
                           });
@@ -258,8 +336,12 @@ function App() {
                       <span style={{ marginLeft: "6px" }}>{img.name.slice(0, 8)}</span>
                     </td>
                     <td>
-                      <a href={processedImageUrls[img.path]} download={img.name} style={actionButtonStyle}><FaDownload /></a>
-                      <button style={actionButtonStyle} onClick={() => deleteImage(img.path)}><FaTrash /></button>
+                      <a href={processedImageUrls[img.path]} download={img.name} style={actionButtonStyle}>
+                        <FaDownload />
+                      </a>
+                      <button style={actionButtonStyle} onClick={() => deleteImage(img.path)}>
+                        <FaTrash />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -272,13 +354,20 @@ function App() {
           </h3>
           {jsonExpanded && (
             <table>
-              <thead><tr><th>Filename</th><th>Download</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Filename</th>
+                  <th>Download</th>
+                </tr>
+              </thead>
               <tbody>
                 {jsonFiles.map((file) => (
                   <tr key={file.path}>
                     <td>{file.name}</td>
                     <td>
-                      <a href={jsonFileUrls[file.path]} download={file.name} style={actionButtonStyle}><FaDownload /></a>
+                      <a href={jsonFileUrls[file.path]} download={file.name} style={actionButtonStyle}>
+                        <FaDownload />
+                      </a>
                     </td>
                   </tr>
                 ))}
@@ -290,13 +379,17 @@ function App() {
         <div className="image-viewer">
           <h2 style={{ textAlign: "left" }}>Viewer</h2>
 
-          {!selectedImageName && selectedProcessedPaths.length === 0 && (
+          {/* Default message */}
+          {!selectedImageName && selectedProcessedPaths.length === 0 && selectedUploadPaths.length === 0 && (
             <p>Select or upload an image to process or view</p>
           )}
 
-          {selectedImageName && selectedProcessedPaths.length === 0 && (
+          {/* Single-upload processing */}
+          {selectedImageName && selectedProcessedPaths.length === 0 && selectedUploadPaths.length === 0 && (
             <>
-              <p><strong>Selected:</strong> {selectedImageName}</p>
+              <p>
+                <strong>Selected:</strong> {selectedImageName}
+              </p>
               <label>
                 Mode:
                 <select value={mode} onChange={(e) => setMode(e.target.value as any)}>
@@ -312,17 +405,51 @@ function App() {
             </>
           )}
 
+          {/* Batch-upload processing */}
+          {selectedUploadPaths.length > 0 && (
+            <>
+              <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "12px" }}>
+                {selectedUploadPaths.map((path) => (
+                  <div key={path} style={{ flex: "1 1 20%", minWidth: "120px" }}>
+                    <img src={uploadUrls[path]} alt="Upload preview" style={{ width: "100%" }} />
+                  </div>
+                ))}
+              </div>
+              <label>
+                Mode:
+                <select value={mode} onChange={(e) => setMode(e.target.value as any)}>
+                  <option value="airplane">Airplane</option>
+                  <option value="ship">Ship</option>
+                  <option value="both">Both</option>
+                  <option value="combinedModel">Combined</option>
+                </select>
+              </label>
+              <button onClick={processBatchImages} disabled={isProcessing}>
+                {isProcessing ? "Processing..." : "Run Batch Detection"}
+              </button>
+            </>
+          )}
+
+          {/* Viewing processed results */}
           {selectedProcessedPaths.length > 0 && (
             <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
               {selectedProcessedPaths.map((path) => (
                 <div key={path} style={{ flex: "1 1 30%", minWidth: "250px" }}>
-                  <img src={processedImageUrls[path]} alt="Processed" style={{ width: "100%", marginBottom: "8px" }} />
+                  <img
+                    src={processedImageUrls[path]}
+                    alt="Processed"
+                    style={{ width: "100%", marginBottom: "8px" }}
+                  />
                   {processedDetections[path] && (
                     <>
                       <h4>Detections</h4>
                       <table>
                         <thead>
-                          <tr><th>Class</th><th>Confidence</th><th>Bounding Box</th></tr>
+                          <tr>
+                            <th>Class</th>
+                            <th>Confidence</th>
+                            <th>Bounding Box</th>
+                          </tr>
                         </thead>
                         <tbody>
                           {processedDetections[path].map((d, i) => (
