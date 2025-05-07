@@ -282,8 +282,8 @@ function App() {
                             if (prev.includes(img.path)) {
                               return prev.filter((p) => p !== img.path);
                             }
-                            if (prev.length >= 3) {
-                              alert("You can select up to 3 images.");
+                            if (prev.length >= 9) {
+                              alert("You can select up to 9 images.");
                               return prev;
                             }
                             return [...prev, img.path];
@@ -410,8 +410,8 @@ function App() {
             <>
               <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "12px" }}>
                 {selectedUploadPaths.map((path) => (
-                  <div key={path} style={{ flex: "1 1 20%", minWidth: "120px" }}>
-                    <img src={uploadUrls[path]} alt="Upload preview" style={{ width: "100%" }} />
+                  <div key={path} className="img-box">
+                    <img src={uploadUrls[path]} alt="Upload preview" className="fade-in" />
                   </div>
                 ))}
               </div>
@@ -425,20 +425,20 @@ function App() {
                 </select>
               </label>
               <button onClick={processBatchImages} disabled={isProcessing}>
-                {isProcessing ? "Processing..." : "Run Batch Detection"}
+                {isProcessing ? <><span>Processing</span><span className="spinner"></span></> : "Run Batch Detection"}
               </button>
             </>
           )}
-
           {/* Viewing processed results */}
           {selectedProcessedPaths.length > 0 && (
             <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
               {selectedProcessedPaths.map((path) => (
-                <div key={path} style={{ flex: "1 1 30%", minWidth: "250px" }}>
+                <div key={path} className="img-box">
                   <img
                     src={processedImageUrls[path]}
                     alt="Processed"
-                    style={{ width: "100%", marginBottom: "8px" }}
+                    className="fade-in"
+                    style={{ marginBottom: "8px" }}
                   />
                   {processedDetections[path] && (
                     <>
