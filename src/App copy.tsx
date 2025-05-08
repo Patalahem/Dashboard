@@ -14,7 +14,7 @@ interface ImageItem {
 interface Detection {
   class: string;
   confidence: number;
-  bbox: [number, number, number, number];
+  bbox: [number, number, number, number]; // [x, y, width, height]
 }
 
 const actionButtonStyle: React.CSSProperties = {
@@ -57,40 +57,30 @@ function App() {
   const [uploadsExpanded, setUploadsExpanded] = useState(true);
   const [processedExpanded, setProcessedExpanded] = useState(false);
   const [jsonExpanded, setJsonExpanded] = useState(false);
+
   const [selectedDetectionMap, setSelectedDetectionMap] = useState<{ [key: string]: number | null }>({});
 
+  // This holds zoom canvases per image
   const canvasRefs = useRef<{ [key: string]: HTMLCanvasElement | null }>({});
 
   const API_BASE = "https://7m4p3mvyjr.us-east-1.awsapprunner.com";
-useEffect(() => {
-  if (user) {
-    const email = user?.signInDetails?.loginId;
-    if (email && !email.endsWith("@udel.edu")) {
-      alert("Access restricted to udel.edu emails only.");
-      signOut();
+
+  useEffect(() => {
+    if (user) {
+      const email = user?.signInDetails?.loginId;
+      if (email && !email.endsWith("@udel.edu")) {
+        alert("Access restricted to udel.edu emails only.");
+        signOut();
+      }
     }
-  }
-}, [user]);
+  }, [user]);
 
-useEffect(() => {
-  fetchImages();
-}, []);
-
-useEffect(() => {
-  selectedProcessedPaths.forEach((path) => {
-    const index = selectedDetectionMap[path];
-    const bbox = processedDetections[path]?.[index ?? -1]?.bbox;
-    const canvas = canvasRefs.current[`canvas-${path}`];
-    const imageUrl = processedImageUrls[path];
-
-    if (canvas && imageUrl && bbox) {
-      drawZoomCanvas(imageUrl, bbox, canvas);
-    }
-  });
-}, [selectedDetectionMap, selectedProcessedPaths, processedDetections, processedImageUrls]);
-
+  useEffect(() => {
+    fetchImages();
+  }, []);
 async function fetchImages() {
   try {
+    // Uploads
     const up = await list({ path: `uploads/${user?.userId}/` });
     setImages(up.items.map((f) => ({
       name: f.path.split("/").pop() || "Unknown",
@@ -110,6 +100,7 @@ async function fetchImages() {
     );
     setUploadUrls(uplinks);
 
+    // Processed
     const pr = await list({ path: "processed/" });
     const imageFiles = pr.items.filter((f) => /\.(?:jpe?g|png|gif)$/i.test(f.path));
     const jsonOnly = pr.items.filter((f) => /\.json$/i.test(f.path));
@@ -143,6 +134,7 @@ async function fetchImages() {
     setProcessedImageUrls(urls);
     setProcessedDetections(dets);
 
+    // JSONs
     setJsonFiles(jsonOnly.map((f) => ({
       name: f.path.split("/").pop() || "Unknown",
       path: f.path,
@@ -253,7 +245,6 @@ function drawZoomCanvas(imageUrl: string, bbox: Detection["bbox"], canvas: HTMLC
 
   const img = new Image();
   img.crossOrigin = "anonymous";
-
   img.onload = () => {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -263,17 +254,10 @@ function drawZoomCanvas(imageUrl: string, bbox: Detection["bbox"], canvas: HTMLC
     const cropW = Math.min(w + padding * 2, img.width - cropX);
     const cropH = Math.min(h + padding * 2, img.height - cropY);
 
-    canvas.width = cropW > 0 ? cropW : 300;
-    canvas.height = cropH > 0 ? cropH : 300;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    canvas.width = cropW;
+    canvas.height = cropH;
     ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
   };
-
-  img.onerror = () => {
-    console.error("Failed to load image for zoom:", imageUrl);
-  };
-
   img.src = imageUrl;
 }
 return (
@@ -473,14 +457,24 @@ return (
   </>
 )}
 
-{/* ✅ Updated Processed Image Viewer */}
 {selectedProcessedPaths.length > 0 && (
   <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
     {selectedProcessedPaths.map((path) => {
       const detections = processedDetections[path] || [];
       const selectedIndex = selectedDetectionMap[path];
-      const showZoom = selectedIndex !== null && selectedIndex !== undefined;
+      const showZoom = selectedIndex !== null && selectedIndex !== undefined && detections[selectedIndex];
       const canvasKey = `canvas-${path}`;
+
+      // Draw zoomed detection if selected
+      useEffect(() => {
+        if (showZoom && canvasRefs.current[canvasKey]) {
+          drawZoomCanvas(
+            processedImageUrls[path],
+            detections[selectedIndex!].bbox,
+            canvasRefs.current[canvasKey]!
+          );
+        }
+      }, [selectedIndex, path, detections, processedImageUrls]);
 
       return (
         <div key={path} className="img-box">
@@ -488,17 +482,12 @@ return (
 
           {showZoom ? (
             <canvas
-              ref={(ref) => {
-                canvasRefs.current[canvasKey] = ref;
-              }}
-              width={300}
-              height={300}
+              ref={(ref) => (canvasRefs.current[canvasKey] = ref)}
               style={{
                 border: "2px solid #444",
                 marginBottom: "8px",
-                display: "block",
-                backgroundColor: "#111",
-                maxWidth: "100%",
+                maxWidth: "300px",
+                height: "auto",
               }}
             />
           ) : (
